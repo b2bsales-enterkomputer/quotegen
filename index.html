@@ -151,6 +151,19 @@
     <input id="cfgKey" placeholder="eyJhbGciOi...">
     <button class="btn btn-outline" style="width:auto;" onclick="saveConfig()">Simpan</button>
     <span id="cfgStatus" style="margin-left:8px;"></span>
+    <div class="row2" style="margin-top:10px;">
+      <div>
+        <label>Username / Email</label>
+        <input id="loginEmail" placeholder="sales1 atau sales1@email.com">
+      </div>
+      <div>
+        <label>Password</label>
+        <input id="loginPassword" type="password" placeholder="Password">
+      </div>
+    </div>
+    <button class="btn btn-green" style="width:auto;" onclick="loginUser()">Login</button>
+    <button class="btn btn-outline" style="width:auto;" onclick="logoutUser()">Logout</button>
+    <span id="authStatus" style="margin-left:8px;"></span>
   </details>
 </div>
 
@@ -317,6 +330,7 @@ const KOP_IMG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlIAAAB5CAIAAAB9S
 const CAP_IMG = "data:image/jpeg;base64,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";
 
 let sb = null;
+let currentUser = null;
 let cartItems = [];
 let itemSeq = 0;
 const DRAFT_KEY = "ek_quotegen_draft_v1";
@@ -330,10 +344,9 @@ function loadConfig(){
   document.getElementById("cfgUrl").value = url;
   document.getElementById("cfgKey").value = key;
   if(url && key){
-    sb = supabase.createClient(url, key);
+    initSupabase(url, key);
     document.getElementById("cfgStatus").textContent = "✓ Terhubung";
     document.getElementById("cfgStatus").className = "ok";
-    previewNumber();
   }
 }
 function saveConfig(){
@@ -342,10 +355,67 @@ function saveConfig(){
   if(!url || !key){ alert("Isi URL dan Anon Key dulu."); return; }
   localStorage.setItem("ek_sb_url", url);
   localStorage.setItem("ek_sb_key", key);
-  sb = supabase.createClient(url, key);
+  initSupabase(url, key);
   document.getElementById("cfgStatus").textContent = "✓ Tersimpan & terhubung";
   document.getElementById("cfgStatus").className = "ok";
+}
+
+async function initSupabase(url, key){
+  sb = supabase.createClient(url, key, {
+    auth: { persistSession: true, autoRefreshToken: true },
+  });
+  sb.auth.onAuthStateChange((_event, session) => {
+    currentUser = session?.user || null;
+    updateAuthStatus();
+    previewNumber();
+  });
+  const { data } = await sb.auth.getSession();
+  currentUser = data?.session?.user || null;
+  updateAuthStatus();
   previewNumber();
+}
+function normalizeLoginEmail(value){
+  const raw = value.trim();
+  return raw.includes("@") ? raw : `${raw}@ek.local`;
+}
+function updateAuthStatus(){
+  const el = document.getElementById("authStatus");
+  if(!el) return;
+  if(currentUser){
+    el.textContent = `Login: ${currentUser.email || currentUser.id}`;
+    el.className = "ok";
+  }else{
+    el.textContent = "Belum login";
+    el.className = "warn";
+  }
+}
+async function loginUser(){
+  if(!sb){ alert("Simpan koneksi Supabase dulu."); return; }
+  const email = normalizeLoginEmail(document.getElementById("loginEmail").value);
+  const password = document.getElementById("loginPassword").value;
+  if(!email || !password){ alert("Isi username/email dan password."); return; }
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ setStatus(`Gagal login: ${error.message}`, "err"); return; }
+  currentUser = data.user;
+  updateAuthStatus();
+  await previewNumber();
+  setStatus("Login berhasil.", "ok");
+}
+async function logoutUser(){
+  if(!sb) return;
+  await sb.auth.signOut();
+  currentUser = null;
+  updateAuthStatus();
+  historyEntries = [];
+  customerEntries = [];
+  selectedHistoryId = null;
+  await previewNumber();
+  setStatus("Logout berhasil.", "ok");
+}
+function requireSupabaseAuth(){
+  if(!sb){ setStatus("Hubungkan Supabase dulu (lihat panel koneksi di atas).", "err"); return false; }
+  if(!currentUser){ setStatus("Login dulu supaya nomor dan history aman per user.", "err"); return false; }
+  return true;
 }
 
 /* ===============================================================
@@ -565,7 +635,7 @@ let selectedHistoryId = null;
 let customerEntries = [];
 let selectedCustomerKey = null;
 async function openHistory(){
-  if(!sb){ alert("Hubungkan Supabase dulu (panel ⚙ di atas)."); return; }
+  if(!requireSupabaseAuth()) return;
   document.getElementById("historyModal").style.display = "flex";
   document.getElementById("historySearch").value = "";
   document.getElementById("historyList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
@@ -576,7 +646,7 @@ function closeHistory(){
 }
 async function loadHistoryEntries(){
   const { data, error } = await sb.from("quotation_history")
-    .select("*").order("created_at", { ascending: false });
+    .select("*").eq("owner_id", currentUser.id).order("created_at", { ascending: false });
   if(error){
     document.getElementById("historyList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
     return;
@@ -622,12 +692,12 @@ function loadHistoryEntry(id){
 }
 async function deleteHistoryEntry(id){
   if(!confirm(`Hapus history ${id}?`)) return;
-  await sb.from("quotation_history").delete().eq("id", id);
+  await sb.from("quotation_history").delete().eq("id", id).eq("owner_id", currentUser.id);
   await loadHistoryEntries();
 }
 
 async function openHistory(){
-  if(!sb){ alert("Hubungkan Supabase dulu (panel koneksi di atas)."); return; }
+  if(!requireSupabaseAuth()) return;
   document.getElementById("historyModal").style.display = "flex";
   document.getElementById("historySearch").value = "";
   document.getElementById("historyList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
@@ -635,7 +705,7 @@ async function openHistory(){
 }
 async function loadHistoryEntries(){
   const { data, error } = await sb.from("quotation_history")
-    .select("*").order("created_at", { ascending: false });
+    .select("*").eq("owner_id", currentUser.id).order("created_at", { ascending: false });
   if(error){
     document.getElementById("historyList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
     return;
@@ -715,13 +785,13 @@ async function deleteSelectedHistory(){
 }
 async function deleteHistoryEntry(id){
   if(!confirm(`Hapus history ${id}?`)) return;
-  await sb.from("quotation_history").delete().eq("id", id);
+  await sb.from("quotation_history").delete().eq("id", id).eq("owner_id", currentUser.id);
   selectedHistoryId = null;
   await loadHistoryEntries();
 }
 
 async function openCustomerPicker(){
-  if(!sb){ alert("Hubungkan Supabase dulu (panel koneksi di atas)."); return; }
+  if(!requireSupabaseAuth()) return;
   document.getElementById("customerModal").style.display = "flex";
   document.getElementById("customerSearch").value = "";
   document.getElementById("customerList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
@@ -734,7 +804,7 @@ function closeCustomerPicker(){
 async function loadCustomerEntries(){
   if(!historyEntries.length){
     const { data, error } = await sb.from("quotation_history")
-      .select("*").order("created_at", { ascending: false });
+      .select("*").eq("owner_id", currentUser.id).order("created_at", { ascending: false });
     if(error){
       document.getElementById("customerList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
       return;
@@ -815,20 +885,27 @@ function useCustomer(key){
    NOMOR DOKUMEN (via Supabase counter, per prefix+bulan)
 =============================================================== */
 async function peekNextNumber(prefix){
-  if(!sb) return `${prefix}-${ymNow()}-????`;
-  const key = `${prefix}_${ymNow()}`;
-  const { data } = await sb.from("quotation_counters").select("count").eq("key", key).maybeSingle();
-  const next = (data?.count || 0) + 1;
-  return `${prefix}-${ymNow()}-${String(next).padStart(4,"0")}`;
+  if(!sb || !currentUser) return `${prefix}-${ymNow()}-????`;
+  const { data, error } = await sb.rpc("peek_quotation_number", {
+    p_prefix: prefix,
+    p_ym: ymNow(),
+  });
+  if(error){
+    console.warn("Gagal preview nomor:", error);
+    return `${prefix}-${ymNow()}-????`;
+  }
+  return data;
 }
 async function getNextNumber(prefix){
-  const key = `${prefix}_${ymNow()}`;
-  const { data } = await sb.from("quotation_counters").select("count").eq("key", key).maybeSingle();
-  const next = (data?.count || 0) + 1;
-  await sb.from("quotation_counters").upsert({ key, count: next });
-  return `${prefix}-${ymNow()}-${String(next).padStart(4,"0")}`;
+  const { data, error } = await sb.rpc("next_quotation_number", {
+    p_prefix: prefix,
+    p_ym: ymNow(),
+  });
+  if(error) throw new Error(`Gagal ambil nomor dokumen: ${error.message}`);
+  return data;
 }
 async function resolveDocNumber(prefix){
+  if(!requireSupabaseAuth()) throw new Error("Login Supabase diperlukan.");
   // Kalau field nomor sudah diisi manual/dari history (beda dari next-peek),
   // pakai ulang nomor itu (nggak increment counter) — sama seperti versi desktop.
   const current = document.getElementById("docNum").value.trim();
@@ -854,7 +931,7 @@ function getValidCartItems(){
 function validateBeforeGenerate(requireSupabase=true){
   if(getValidCartItems().length === 0){ setStatus("Cart masih kosong / belum ada nama item.", "err"); return false; }
   if(!document.getElementById("custName").value.trim()){ setStatus("Nama customer wajib diisi.", "err"); return false; }
-  if(requireSupabase && !sb){ setStatus("Hubungkan Supabase dulu (lihat panel koneksi di atas).", "err"); return false; }
+  if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
 function setStatus(msg, cls){
@@ -863,15 +940,20 @@ function setStatus(msg, cls){
   el.className = cls || "";
 }
 async function saveHistory(num, docKey, customer, items, discount, dateStr){
-  try{
-    await sb.from("quotation_history").upsert({
-      id: num, doc_type: docKey,
-      customer_name: customer.name, customer_phone: customer.phone, customer_email: customer.email,
-      items: items, discount: discount, doc_date: dateStr,
-    });
-    historyEntries = [];
-    customerEntries = [];
-  }catch(e){ console.warn("Gagal simpan history:", e); }
+  const { error } = await sb.from("quotation_history").insert({
+    id: num,
+    owner_id: currentUser.id,
+    doc_type: docKey,
+    customer_name: customer.name,
+    customer_phone: customer.phone,
+    customer_email: customer.email,
+    items: items,
+    discount: discount,
+    doc_date: dateStr,
+  });
+  if(error) throw new Error(`Gagal simpan history: ${error.message}`);
+  historyEntries = [];
+  customerEntries = [];
 }
 
 async function previewPDF(){
