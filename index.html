@@ -106,6 +106,7 @@
   }
   .modal-card.history{ max-width:900px; }
   .modal-card.customer{ max-width:720px; }
+  .modal-card.preview{ max-width:980px; width:96%; height:90vh; }
   .modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
   .modal-head h2{ margin:0; font-size:13px; color:var(--green); }
   .icon-close{ background:none; border:none; color:var(--tdim); font-size:20px; cursor:pointer; }
@@ -123,6 +124,12 @@
   .list-title{ color:var(--text); font-weight:700; margin-bottom:4px; }
   .list-detail{ color:var(--tdim); font-size:10px; line-height:1.4; }
   .modal-actions{ display:flex; gap:8px; align-items:center; margin-top:10px; }
+  .preview-frame{ width:100%; flex:1; border:1px solid var(--border); border-radius:6px; background:#fff; }
+  .mini-btn{
+    background:transparent; border:1px solid var(--border); color:var(--tdim);
+    border-radius:4px; width:24px; height:24px; cursor:pointer; margin-right:3px;
+  }
+  .mini-btn:hover{ border-color:var(--green); color:var(--green); }
 </style>
 </head>
 <body>
@@ -167,7 +174,7 @@
 
     <table id="cartTable">
       <thead>
-        <tr><th>Produk</th><th style="width:80px;">Jml</th><th style="width:150px;">Harga</th><th style="width:150px;text-align:right;">Total</th><th style="width:34px;"></th></tr>
+        <tr><th>Produk</th><th style="width:80px;">Jml</th><th style="width:150px;">Harga</th><th style="width:150px;text-align:right;">Total</th><th style="width:96px;"></th></tr>
       </thead>
       <tbody id="cartBody"></tbody>
     </table>
@@ -230,6 +237,7 @@
     </div>
 
     <div style="margin-top:16px;">
+      <button class="btn btn-outline" id="btnPreview" onclick="previewPDF()">Preview</button>
       <button class="btn btn-green" id="btnPdf" onclick="generatePDF()">PDF</button>
       <button class="btn btn-outline" id="btnDocx" onclick="generateDOCX()">DOCX</button>
     </div>
@@ -249,6 +257,7 @@
     <div id="historyList" class="listbox"></div>
     <div class="modal-actions">
       <button class="btn btn-green" style="width:auto;margin:0;" onclick="loadSelectedHistory()">Muat ke Editor</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="duplicateSelectedHistory()">Duplicate</button>
       <button class="btn btn-danger" style="width:auto;margin:0;" onclick="deleteSelectedHistory()">Hapus Entry</button>
       <button class="btn btn-outline" style="width:auto;margin:0;margin-left:auto;" onclick="loadHistoryEntries()">Refresh</button>
     </div>
@@ -268,6 +277,17 @@
       <button class="btn btn-green" style="width:auto;margin:0;" onclick="useSelectedCustomer()">Pakai Customer</button>
       <button class="btn btn-outline" style="width:auto;margin:0;margin-left:auto;" onclick="closeCustomerPicker()">Tutup</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW -->
+<div id="previewModal" class="modal">
+  <div class="modal-card preview">
+    <div class="modal-head">
+      <h2>PREVIEW PDF</h2>
+      <button onclick="closePreview()" class="icon-close">x</button>
+    </div>
+    <iframe id="previewFrame" class="preview-frame"></iframe>
   </div>
 </div>
 
@@ -299,6 +319,7 @@ const CAP_IMG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BS
 let sb = null;
 let cartItems = [];
 let itemSeq = 0;
+const DRAFT_KEY = "ek_quotegen_draft_v1";
 
 /* ===============================================================
    SUPABASE CONFIG (disimpan di localStorage browser)
@@ -363,6 +384,13 @@ function removeItem(id){
   cartItems = cartItems.filter(i => i.id !== id);
   renderCart();
 }
+function moveItem(id, dir){
+  const idx = cartItems.findIndex(i => i.id === id);
+  const newIdx = idx + dir;
+  if(idx < 0 || newIdx < 0 || newIdx >= cartItems.length) return;
+  [cartItems[idx], cartItems[newIdx]] = [cartItems[newIdx], cartItems[idx]];
+  renderCart();
+}
 function clearCart(){
   if(!cartItems.length && !document.getElementById("custName").value.trim()) return;
   if(!confirm("Hapus semua item cart dan kosongkan data customer?")) return;
@@ -390,7 +418,11 @@ function renderCart(skipRebuildInputs){
         <td><input type="number" min="1" value="${it.qty}" oninput="updateItem(${it.id},'qty',this.value)"></td>
         <td><input type="number" min="0" value="${it.price}" oninput="updateItem(${it.id},'price',this.value)"></td>
         <td class="num">${fmtRp((Number(it.qty)||0) * (Number(it.price)||0))}</td>
-        <td><button class="del-btn" onclick="removeItem(${it.id})">x</button></td>
+        <td style="white-space:nowrap;">
+          <button class="mini-btn" onclick="moveItem(${it.id},-1)" title="Naik">↑</button>
+          <button class="mini-btn" onclick="moveItem(${it.id},1)" title="Turun">↓</button>
+          <button class="del-btn" onclick="removeItem(${it.id})">x</button>
+        </td>
       `;
       body.appendChild(tr);
     });
@@ -400,16 +432,69 @@ function renderCart(skipRebuildInputs){
   const grand = Math.max(0, sub - disc);
   document.getElementById("tSub").textContent = fmtRp(sub);
   document.getElementById("tGrand").textContent = fmtRp(grand);
+  saveDraft();
 }
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function collectDraft(){
+  return {
+    docType: document.getElementById("docType").value,
+    docNum: document.getElementById("docNum").value,
+    docDate: document.getElementById("docDate").value,
+    customer: {
+      name: document.getElementById("custName").value,
+      phone: document.getElementById("custPhone").value,
+      email: document.getElementById("custEmail").value,
+    },
+    discount: document.getElementById("discount").value,
+    items: cartItems.map(({name, qty, price}) => ({name, qty, price})),
+  };
+}
+function saveDraft(){
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(collectDraft())); }
+  catch(e){ console.warn("Gagal autosave draft:", e); }
+}
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return false;
+    const draft = JSON.parse(raw);
+    if(!draft || typeof draft !== "object") return false;
+    if(draft.docType) document.getElementById("docType").value = draft.docType;
+    if(draft.docNum) document.getElementById("docNum").value = draft.docNum;
+    if(draft.docDate) document.getElementById("docDate").value = draft.docDate;
+    document.getElementById("custName").value = draft.customer?.name || "";
+    document.getElementById("custPhone").value = draft.customer?.phone || "";
+    document.getElementById("custEmail").value = draft.customer?.email || "";
+    document.getElementById("discount").value = draft.discount || 0;
+    cartItems = Array.isArray(draft.items)
+      ? draft.items.map(it => ({ id: ++itemSeq, name: it.name || "", qty: Number(it.qty)||1, price: Number(it.price)||0 }))
+      : [];
+    if(!cartItems.length) addItem(); else renderCart();
+    setStatus("Draft terakhir dipulihkan otomatis.", "ok");
+    return true;
+  }catch(e){
+    console.warn("Gagal load draft:", e);
+    return false;
+  }
+}
+function bindAutosave(){
+  ["docNum","docDate","custName","custPhone","custEmail","discount"].forEach(id => {
+    document.getElementById(id).addEventListener("input", saveDraft);
+  });
+  document.getElementById("docType").addEventListener("change", saveDraft);
 }
 
 /* ===============================================================
    PASTE DARI POS — parser regex (bukan AI), sama seperti versi desktop
    Pola: "1 unit RTX 5070 (1 x @12.000.000 = Rp ...)"
 =============================================================== */
-const POS_LINE_RE = /(\d+)\s+unit\s+(.*?)\s+\((\d+)\s+x\s+@([\d.]+)/i;
+const POS_LINE_RE = /(\d+)\s*(?:unit|pcs|pc|buah)?\s+(.+?)\s+\((\d+)\s*x\s*@\s*(?:Rp\s*)?([\d.]+)/i;
+const POS_LINE_RE_2 = /(.+?)\s+\((\d+)\s*x\s*@\s*(?:Rp\s*)?([\d.]+)/i;
+const POS_LINE_RE_3 = /(\d+)\s*(?:unit|pcs|pc|buah)\s+(.+?)\s+@\s*(?:Rp\s*)?([\d.]+)/i;
+const POS_LINE_RE_4 = /(.+?)\s+(?:Rp\s*)?([\d.]{4,})(?:\s*[xX]\s*(\d+))?$/i;
 
 function cleanProductName(name){
   return name.replace(/\[READY\]/ig, "").replace(/\s+/g," ").trim();
@@ -419,13 +504,27 @@ function parsePosText(rawText){
   rawText.split("\n").forEach(line => {
     line = line.trim();
     if(!line) return;
-    const m = POS_LINE_RE.exec(line);
-    if(!m){ failed.push(line); return; }
-    items.push({
-      name: cleanProductName(m[2]),
-      qty: parseInt(m[1], 10),
-      price: parseInt(m[4].replace(/\./g,""), 10),
-    });
+    let m = POS_LINE_RE.exec(line);
+    if(m){
+      items.push({ name: cleanProductName(m[2]), qty: parseInt(m[1],10), price: parseInt(m[4].replace(/\./g,""),10) });
+      return;
+    }
+    m = POS_LINE_RE_2.exec(line);
+    if(m){
+      items.push({ name: cleanProductName(m[1]), qty: parseInt(m[2],10), price: parseInt(m[3].replace(/\./g,""),10) });
+      return;
+    }
+    m = POS_LINE_RE_3.exec(line);
+    if(m){
+      items.push({ name: cleanProductName(m[2]), qty: parseInt(m[1],10), price: parseInt(m[3].replace(/\./g,""),10) });
+      return;
+    }
+    m = POS_LINE_RE_4.exec(line);
+    if(m){
+      items.push({ name: cleanProductName(m[1]), qty: parseInt(m[3] || "1",10), price: parseInt(m[2].replace(/\./g,""),10) });
+      return;
+    }
+    failed.push(line);
   });
   return { items, failed };
 }
@@ -578,6 +677,23 @@ function loadSelectedHistory(){
   if(!selectedHistoryId){ alert("Pilih entry terlebih dahulu."); return; }
   loadHistoryEntry(selectedHistoryId);
 }
+async function duplicateSelectedHistory(){
+  if(!selectedHistoryId){ alert("Pilih entry terlebih dahulu."); return; }
+  const entry = historyEntries.find(e => e.id === selectedHistoryId);
+  if(!entry) return;
+  document.getElementById("docType").value = entry.doc_type || "Penawaran Harga";
+  document.getElementById("docDate").value = todayStr();
+  document.getElementById("custName").value = entry.customer_name || "";
+  document.getElementById("custPhone").value = entry.customer_phone || "";
+  document.getElementById("custEmail").value = entry.customer_email || "";
+  document.getElementById("discount").value = entry.discount || 0;
+  cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
+  renderCart();
+  await previewNumber();
+  saveDraft();
+  closeHistory();
+  setStatus(`Duplicate dari ${entry.id}. Nomor dokumen baru sudah disiapkan.`, "ok");
+}
 function loadHistoryEntry(id){
   const entry = historyEntries.find(e => e.id === id);
   if(!entry) return;
@@ -690,6 +806,7 @@ function useCustomer(key){
   document.getElementById("custName").value = customer.name || "";
   document.getElementById("custPhone").value = customer.phone || "";
   document.getElementById("custEmail").value = customer.email || "";
+  saveDraft();
   closeCustomerPicker();
   setStatus(`Customer dimuat: ${customer.name}`, "ok");
 }
@@ -734,10 +851,10 @@ function getValidCartItems(){
   // Buang baris yang nama-nya masih kosong (misal baris starter yang belum diisi)
   return cartItems.filter(it => (it.name || "").trim() !== "");
 }
-function validateBeforeGenerate(){
+function validateBeforeGenerate(requireSupabase=true){
   if(getValidCartItems().length === 0){ setStatus("Cart masih kosong / belum ada nama item.", "err"); return false; }
   if(!document.getElementById("custName").value.trim()){ setStatus("Nama customer wajib diisi.", "err"); return false; }
-  if(!sb){ setStatus("Hubungkan Supabase dulu (lihat panel ⚙ di atas).", "err"); return false; }
+  if(requireSupabase && !sb){ setStatus("Hubungkan Supabase dulu (lihat panel koneksi di atas).", "err"); return false; }
   return true;
 }
 function setStatus(msg, cls){
@@ -755,6 +872,108 @@ async function saveHistory(num, docKey, customer, items, discount, dateStr){
     historyEntries = [];
     customerEntries = [];
   }catch(e){ console.warn("Gagal simpan history:", e); }
+}
+
+async function previewPDF(){
+  if(!validateBeforeGenerate(false)) return;
+  const docKey = document.getElementById("docType").value;
+  const prefix = DOC_TYPES[docKey].prefix;
+  const judul = DOC_TYPES[docKey].judul;
+  const num = document.getElementById("docNum").value.trim() || await peekNextNumber(prefix);
+  const dateStr = document.getElementById("docDate").value.trim() || todayStr();
+  const customer = {
+    name: document.getElementById("custName").value.trim(),
+    phone: document.getElementById("custPhone").value.trim(),
+    email: document.getElementById("custEmail").value.trim(),
+  };
+  const items = getValidCartItems();
+  const discount = Number(document.getElementById("discount").value) || 0;
+  const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
+  const grand = Math.max(0, sub - discount);
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "cm", format: "a4" });
+  const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
+  const FB = [26,26,26], FG = [85,85,85], FL = [242,242,242], FN = [153,153,153], FV = [26,122,46], FR = [192,57,43];
+  let y = 1.5;
+  const kopH = CW / 4.91;
+  doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH);
+  y += kopH;
+  doc.setDrawColor(...FB); doc.setLineWidth(0.07); doc.line(margin, y, W-margin, y);
+  y += 0.42;
+  doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+  doc.text("No. : ", margin, y);
+  doc.setFont("times","bold"); doc.text(num, margin+1.05, y);
+  doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
+  y += 0.25; doc.setDrawColor(...FN); doc.line(margin, y, W-margin, y); y += 0.75;
+  doc.setFont("times","bold"); doc.setFontSize(13); doc.text(judul.toUpperCase(), W/2, y, { align:"center" });
+  y += 0.22; doc.setDrawColor(...FV); doc.line(W/2 - (CW*0.4)/2, y, W/2 + (CW*0.4)/2, y); y += 0.7;
+  doc.setFont("times","normal"); doc.setFontSize(10);
+  doc.text("Kepada Yth.", margin, y); y += 0.48;
+  doc.setFont("times","bold"); doc.text(customer.name || "-", margin, y); y += 0.48;
+  doc.setFont("times","normal");
+  if(customer.phone){ doc.text(`No. Telepon : ${customer.phone}`, margin, y); y += 0.48; }
+  if(customer.email){ doc.text(`Email           : ${customer.email}`, margin, y); y += 0.48; }
+  doc.text("di Tempat", margin, y); y += 0.72;
+  doc.text("Dengan hormat,", margin, y); y += 0.48;
+  const opening = docKey === "Proforma Invoice"
+    ? "Bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
+    : "Bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
+  const openLines = doc.splitTextToSize(opening, CW);
+  doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
+  const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
+  const footRows = [
+    [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB}}, {content:fmtRp(sub), styles:{halign:"right", fontStyle:"bold"}}],
+  ];
+  if(discount>0){
+    footRows.push([
+      {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
+      {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
+    ]);
+  }
+  footRows.push([
+    {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV}},
+    {content:fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV}},
+  ]);
+  doc.autoTable({
+    startY:y, margin:{left:margin,right:margin},
+    head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
+    body, foot:footRows,
+    styles:{font:"times", fontSize:9, textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21}},
+    headStyles:{fillColor:FB, textColor:255, fontStyle:"bold"},
+    alternateRowStyles:{fillColor:FL},
+    columnStyles:{0:{cellWidth:CW*0.05,halign:"center"},1:{cellWidth:CW*0.45},2:{cellWidth:CW*0.07,halign:"center"},3:{cellWidth:CW*0.22,halign:"right"},4:{cellWidth:CW*0.21,halign:"right"}},
+    footStyles:{fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0},
+    showFoot:"lastPage",
+  });
+  y = doc.lastAutoTable.finalY + 0.64;
+  doc.setFont("times","normal"); doc.setFontSize(10); doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
+  doc.autoTable({
+    startY:y, margin:{left:margin,right:margin},
+    body:[["Bank BCA","693-0310-105  a/n  CV TEMAN BAIK"],["Bank Mandiri","1200012717422  a/n  CV TEMAN BAIK"]],
+    theme:"grid",
+    styles:{font:"times", fontSize:10, fillColor:FL, textColor:FB, lineColor:FN, lineWidth:0.01},
+    columnStyles:{0:{cellWidth:CW*0.25,fontStyle:"bold"},1:{cellWidth:CW*0.75,fontStyle:"bold",textColor:FV}},
+  });
+  doc.addPage();
+  y = 1.5;
+  doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH); y += kopH;
+  doc.setDrawColor(...FB); doc.setLineWidth(0.07); doc.line(margin, y, W-margin, y); y += 0.68;
+  doc.setFont("times","bold"); doc.setFontSize(11); doc.setTextColor(...FB); doc.text("Syarat & Ketentuan", margin, y); y += 0.22;
+  doc.setDrawColor(...FN); doc.line(margin, y, W-margin, y); y += 0.48;
+  doc.setFont("times","normal"); doc.setFontSize(9);
+  SYARAT_ISI.forEach((line, i) => {
+    const wrapped = doc.splitTextToSize(`${i+1}.  ${line}`, CW-0.5);
+    doc.text(wrapped, margin+0.5, y);
+    y += wrapped.length*0.44 + 0.14;
+  });
+  doc.addImage(CAP_IMG, "JPEG", margin, Math.min(y+1.0, H - 4.4), 3.5, 2.0);
+  doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(...FG);
+  doc.text("Page : 2/2", W-margin, H - 2.0, { align:"right" });
+  document.getElementById("previewFrame").src = doc.output("bloburl");
+  document.getElementById("previewModal").style.display = "flex";
+}
+function closePreview(){
+  document.getElementById("previewModal").style.display = "none";
 }
 
 /* ===============================================================
@@ -1062,8 +1281,9 @@ async function generateDOCX(){
 =============================================================== */
 window.onload = () => {
   document.getElementById("docDate").value = todayStr();
+  bindAutosave();
   loadConfig();
-  addItem(); // 1 baris kosong biar langsung bisa isi
+  if(!loadDraft()) addItem(); // 1 baris kosong biar langsung bisa isi
 };
 </script>
 </body>
