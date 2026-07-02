@@ -267,7 +267,7 @@ function saveConfig(){
 =============================================================== */
 function fmtRp(n){
   n = Math.round(n || 0);
-  return "Rp " + n.toLocaleString("id-ID");
+  return "Rp\u00A0" + n.toLocaleString("id-ID");
 }
 function todayStr(){
   const d = new Date();
@@ -362,6 +362,8 @@ function parsePosPaste(){
     return;
   }
   const { items, failed } = parsePosText(raw);
+  // Buang baris starter kosong (nama masih kosong) sebelum menambahkan hasil parse
+  cartItems = cartItems.filter(it => (it.name || "").trim() !== "");
   items.forEach(it => {
     itemSeq++;
     cartItems.push({ id: itemSeq, name: it.name, qty: it.qty, price: it.price });
@@ -483,8 +485,12 @@ async function previewNumber(){
 /* ===============================================================
    VALIDASI SEBELUM GENERATE
 =============================================================== */
+function getValidCartItems(){
+  // Buang baris yang nama-nya masih kosong (misal baris starter yang belum diisi)
+  return cartItems.filter(it => (it.name || "").trim() !== "");
+}
 function validateBeforeGenerate(){
-  if(cartItems.length === 0){ setStatus("Cart masih kosong.", "err"); return false; }
+  if(getValidCartItems().length === 0){ setStatus("Cart masih kosong / belum ada nama item.", "err"); return false; }
   if(!document.getElementById("custName").value.trim()){ setStatus("Nama customer wajib diisi.", "err"); return false; }
   if(!sb){ setStatus("Hubungkan Supabase dulu (lihat panel ⚙ di atas).", "err"); return false; }
   return true;
@@ -523,8 +529,9 @@ async function generatePDF(){
       phone: document.getElementById("custPhone").value.trim(),
       email: document.getElementById("custEmail").value.trim(),
     };
+    const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
-    const sub = cartItems.reduce((s,i)=> s + (i.qty*i.price), 0);
+    const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
     const grand = Math.max(0, sub - discount);
 
     const { jsPDF } = window.jspdf;
@@ -537,12 +544,12 @@ async function generatePDF(){
     y += kopH + 0.25;
     doc.setDrawColor(26,26,26); doc.setLineWidth(0.04);
     doc.line(margin, y, W-margin, y);
-    y += 0.7;
+    y += 0.55;
 
     doc.setFont("times","normal"); doc.setFontSize(10);
     doc.text(`No. : ${num}`, margin, y);
     doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
-    y += 0.3;
+    y += 0.45;
     doc.setDrawColor(150); doc.line(margin, y, W-margin, y);
     y += 0.9;
 
@@ -564,7 +571,7 @@ async function generatePDF(){
     const openLines = doc.splitTextToSize(opening, CW);
     doc.text(openLines, margin, y); y += openLines.length*0.42 + 0.3;
 
-    const body = cartItems.map((it,i) => [
+    const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
     const footRows = [
@@ -646,7 +653,7 @@ async function generatePDF(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     doc.save(`${filePrefix}_${safeName}_${num}.pdf`);
 
-    await saveHistory(num, docKey, customer, cartItems, discount, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, dateStr);
     setStatus(`✅ PDF berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -679,8 +686,9 @@ async function generateDOCX(){
       phone: document.getElementById("custPhone").value.trim(),
       email: document.getElementById("custEmail").value.trim(),
     };
+    const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
-    const sub = cartItems.reduce((s,i)=> s + (i.qty*i.price), 0);
+    const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
     const grand = Math.max(0, sub - discount);
 
     const cellText = (text, opts={}) => new TableCell({
@@ -697,7 +705,7 @@ async function generateDOCX(){
       cellText("Harga Satuan", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
       cellText("Total", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
     ]});
-    const itemRows = cartItems.map((it,i) => {
+    const itemRows = items.map((it,i) => {
       const stripe = i % 2 === 1 ? "f2f2f2" : undefined;
       return new TableRow({ children: [
         cellText(i+1, { align:AlignmentType.CENTER, fill:stripe }),
@@ -781,7 +789,7 @@ async function generateDOCX(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     saveAs(blob, `${filePrefix}_${safeName}_${num}.docx`);
 
-    await saveHistory(num, docKey, customer, cartItems, discount, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, dateStr);
     setStatus(`✅ DOCX berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
