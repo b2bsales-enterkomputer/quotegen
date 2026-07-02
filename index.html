@@ -95,7 +95,10 @@
 
 <header>
   <h1>EK Quotation Generator</h1>
-  <span class="badge">Enterkomputer &middot; Formal Letter</span>
+  <div style="display:flex; align-items:center; gap:14px;">
+    <button class="btn btn-outline" style="width:auto; padding:7px 14px; margin:0;" onclick="openHistory()">📜 History</button>
+    <span class="badge">Enterkomputer &middot; Formal Letter</span>
+  </div>
 </header>
 
 <div class="setup">
@@ -115,6 +118,17 @@
   <!-- PANEL TENGAH: CART -->
   <div class="panel">
     <h2>Cart / Daftar Item</h2>
+
+    <label>Paste Teks dari POS (opsional)</label>
+    <textarea id="posPasteArea" rows="3"
+      placeholder="1 unit RTX 5070 (1 x @12.000.000 = Rp 12.000.000)"
+      style="width:100%;background:#0f1117;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:8px;margin-bottom:6px;resize:vertical;"></textarea>
+    <div style="display:flex; gap:8px; margin-bottom:6px;">
+      <button class="btn btn-outline" style="width:auto;flex:1;margin:0;" onclick="parsePosPaste()">📋 Parse &amp; Tambah ke Cart</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="clearPosPaste()">Bersihkan</button>
+    </div>
+    <div id="posPasteStatus" style="font-size:12px; margin-bottom:14px; min-height:14px;"></div>
+
     <table id="cartTable">
       <thead>
         <tr><th>Nama Item</th><th>Qty</th><th>Harga Satuan</th><th></th></tr>
@@ -177,6 +191,18 @@
     </div>
 
     <div id="status"></div>
+  </div>
+</div>
+
+<!-- MODAL HISTORY -->
+<div id="historyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--border); border-radius:10px; width:92%; max-width:720px; max-height:82vh; display:flex; flex-direction:column; padding:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <h2 style="margin:0; font-size:16px;">History Quotation</h2>
+      <button onclick="closeHistory()" style="background:none;border:none;color:var(--tdim);font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <input id="historySearch" placeholder="Cari nomor, nama customer, tanggal..." oninput="renderHistoryList()">
+    <div id="historyList" style="overflow-y:auto; flex:1; margin-top:4px;"></div>
   </div>
 </div>
 
@@ -305,6 +331,123 @@ function escapeHtml(s){
 }
 
 /* ===============================================================
+   PASTE DARI POS — parser regex (bukan AI), sama seperti versi desktop
+   Pola: "1 unit RTX 5070 (1 x @12.000.000 = Rp ...)"
+=============================================================== */
+const POS_LINE_RE = /(\d+)\s+unit\s+(.*?)\s+\((\d+)\s+x\s+@([\d.]+)/i;
+
+function cleanProductName(name){
+  return name.replace(/\[READY\]/ig, "").replace(/\s+/g," ").trim();
+}
+function parsePosText(rawText){
+  const items = [], failed = [];
+  rawText.split("\n").forEach(line => {
+    line = line.trim();
+    if(!line) return;
+    const m = POS_LINE_RE.exec(line);
+    if(!m){ failed.push(line); return; }
+    items.push({
+      name: cleanProductName(m[2]),
+      qty: parseInt(m[1], 10),
+      price: parseInt(m[4].replace(/\./g,""), 10),
+    });
+  });
+  return { items, failed };
+}
+function parsePosPaste(){
+  const raw = document.getElementById("posPasteArea").value;
+  const statusEl = document.getElementById("posPasteStatus");
+  if(!raw.trim()){
+    statusEl.innerHTML = '<span class="warn">Paste teks POS dulu.</span>';
+    return;
+  }
+  const { items, failed } = parsePosText(raw);
+  items.forEach(it => {
+    itemSeq++;
+    cartItems.push({ id: itemSeq, name: it.name, qty: it.qty, price: it.price });
+  });
+  renderCart();
+  if(items.length === 0){
+    statusEl.innerHTML = `<span class="err">Tidak ada baris yang cocok pola POS. ${failed.length} baris gagal.</span>`;
+    return;
+  }
+  let msg = `✅ ${items.length} item ditambahkan ke cart.`;
+  let cls = "ok";
+  if(failed.length){ msg += ` ${failed.length} baris tidak terbaca (dilewati).`; cls = "warn"; }
+  statusEl.innerHTML = `<span class="${cls}">${msg}</span>`;
+}
+function clearPosPaste(){
+  document.getElementById("posPasteArea").value = "";
+  document.getElementById("posPasteStatus").textContent = "";
+}
+
+/* ===============================================================
+   HISTORY QUOTATION
+=============================================================== */
+let historyEntries = [];
+async function openHistory(){
+  if(!sb){ alert("Hubungkan Supabase dulu (panel ⚙ di atas)."); return; }
+  document.getElementById("historyModal").style.display = "flex";
+  document.getElementById("historySearch").value = "";
+  document.getElementById("historyList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
+  await loadHistoryEntries();
+}
+function closeHistory(){
+  document.getElementById("historyModal").style.display = "none";
+}
+async function loadHistoryEntries(){
+  const { data, error } = await sb.from("quotation_history")
+    .select("*").order("created_at", { ascending: false });
+  if(error){
+    document.getElementById("historyList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  historyEntries = data || [];
+  renderHistoryList();
+}
+function renderHistoryList(){
+  const q = document.getElementById("historySearch").value.trim().toLowerCase();
+  const filtered = !q ? historyEntries : historyEntries.filter(e =>
+    (e.id||"").toLowerCase().includes(q) ||
+    (e.customer_name||"").toLowerCase().includes(q) ||
+    (e.doc_date||"").toLowerCase().includes(q) ||
+    (e.doc_type||"").toLowerCase().includes(q));
+  const list = document.getElementById("historyList");
+  if(filtered.length === 0){
+    list.innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:16px 0;">Belum ada history.</p>';
+    return;
+  }
+  list.innerHTML = filtered.map(e => `
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid var(--border); font-size:12px;">
+      <div style="cursor:pointer;flex:1;" onclick="loadHistoryEntry(${JSON.stringify(e.id)})">
+        <b>${escapeHtml(e.id)}</b> &middot; ${escapeHtml(e.customer_name)} &middot; ${escapeHtml(e.doc_date)} &middot; ${(e.items||[]).length} item &middot; ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}
+      </div>
+      <button class="del-btn" onclick="deleteHistoryEntry(${JSON.stringify(e.id)})">✕</button>
+    </div>
+  `).join("");
+}
+function loadHistoryEntry(id){
+  const entry = historyEntries.find(e => e.id === id);
+  if(!entry) return;
+  document.getElementById("docType").value = entry.doc_type;
+  document.getElementById("docNum").value = entry.id;
+  document.getElementById("docDate").value = entry.doc_date;
+  document.getElementById("custName").value = entry.customer_name || "";
+  document.getElementById("custPhone").value = entry.customer_phone || "";
+  document.getElementById("custEmail").value = entry.customer_email || "";
+  document.getElementById("discount").value = entry.discount || 0;
+  cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
+  renderCart();
+  closeHistory();
+  setStatus(`📂 Dimuat dari history: ${entry.id} — nomor akan dipakai ulang jika langsung Generate.`, "ok");
+}
+async function deleteHistoryEntry(id){
+  if(!confirm(`Hapus history ${id}?`)) return;
+  await sb.from("quotation_history").delete().eq("id", id);
+  await loadHistoryEntries();
+}
+
+/* ===============================================================
    NOMOR DOKUMEN (via Supabase counter, per prefix+bulan)
 =============================================================== */
 async function peekNextNumber(prefix){
@@ -320,6 +463,16 @@ async function getNextNumber(prefix){
   const next = (data?.count || 0) + 1;
   await sb.from("quotation_counters").upsert({ key, count: next });
   return `${prefix}-${ymNow()}-${String(next).padStart(4,"0")}`;
+}
+async function resolveDocNumber(prefix){
+  // Kalau field nomor sudah diisi manual/dari history (beda dari next-peek),
+  // pakai ulang nomor itu (nggak increment counter) — sama seperti versi desktop.
+  const current = document.getElementById("docNum").value.trim();
+  const peek = await peekNextNumber(prefix);
+  if(!current || current === peek){
+    return await getNextNumber(prefix);
+  }
+  return current;
 }
 async function previewNumber(){
   const docKey = document.getElementById("docType").value;
@@ -343,7 +496,7 @@ function setStatus(msg, cls){
 }
 async function saveHistory(num, docKey, customer, items, discount, dateStr){
   try{
-    await sb.from("quotation_history").insert({
+    await sb.from("quotation_history").upsert({
       id: num, doc_type: docKey,
       customer_name: customer.name, customer_phone: customer.phone, customer_email: customer.email,
       items: items, discount: discount, doc_date: dateStr,
@@ -362,7 +515,7 @@ async function generatePDF(){
     const docKey = document.getElementById("docType").value;
     const prefix = DOC_TYPES[docKey].prefix;
     const judul  = DOC_TYPES[docKey].judul;
-    const num = await getNextNumber(prefix);
+    const num = await resolveDocNumber(prefix);
     document.getElementById("docNum").value = num;
     const dateStr = document.getElementById("docDate").value.trim() || todayStr();
     const customer = {
@@ -414,26 +567,38 @@ async function generatePDF(){
     const body = cartItems.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
+    const footRows = [
+      [{content:"Subtotal", colSpan:4, styles:{halign:"right", fontStyle:"bold"}},
+       {content: fmtRp(sub), styles:{halign:"right", fontStyle:"bold"}}],
+    ];
+    if(discount>0){
+      footRows.push([
+        {content:"Diskon", colSpan:4, styles:{halign:"right", fontStyle:"italic", textColor:[192,57,43]}},
+        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", textColor:[192,57,43]}},
+      ]);
+    }
+    footRows.push([
+      {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46]}},
+      {content: fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46]}},
+    ]);
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
       body: body,
-      styles: { font:"times", fontSize:9, textColor:[26,26,26] },
-      headStyles: { fillColor:[26,26,26], textColor:255, fontStyle:"bold" },
+      foot: footRows,
+      styles: { font:"times", fontSize:9, textColor:[26,26,26], lineColor:[153,153,153], lineWidth:0.01 },
+      headStyles: { fillColor:[26,26,26], textColor:255, fontStyle:"bold", fontSize:9 },
+      alternateRowStyles: { fillColor:[242,242,242] },
       columnStyles: {
         0:{ cellWidth:1, halign:"center" }, 2:{ cellWidth:1.5, halign:"center" },
         3:{ halign:"right" }, 4:{ halign:"right" },
       },
-      foot: [
-        ["","","","Subtotal", fmtRp(sub)],
-        ...(discount>0 ? [["","","","Diskon", "- "+fmtRp(discount)]] : []),
-        ["","","","GRAND TOTAL", fmtRp(grand)],
-      ],
-      footStyles: { fontStyle:"bold", textColor:[26,26,26], fillColor:255 },
+      footStyles: { fontSize:9, lineWidth:0 },
+      showFoot: "lastPage",
     });
     y = doc.lastAutoTable.finalY + 0.8;
 
-    doc.setFont("times","normal"); doc.setFontSize(10);
+    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(26,26,26);
     doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.5;
     doc.setFont("times","bold");
     doc.text("Bank BCA", margin, y);
@@ -449,7 +614,12 @@ async function generatePDF(){
     doc.setFont("times","normal"); doc.setFontSize(10);
     doc.text("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.", margin, y, { maxWidth: CW }); y += 0.6;
     doc.text("Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih.", margin, y, { maxWidth: CW });
-    y += 1.0;
+    y += 0.5;
+    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(85,85,85);
+    doc.text("Page : 1/2", W-margin, 28.5, { align:"right" });
+    doc.setTextColor(26,26,26);
+
+    y += 0.6;
     const capW = 3.5, capH = capW * (119/207);
     doc.addImage(CAP_IMG, "JPEG", margin, y, capW, capH);
 
@@ -460,7 +630,7 @@ async function generatePDF(){
     y += kopH + 0.25;
     doc.setDrawColor(26,26,26); doc.line(margin, y, W-margin, y);
     y += 0.6;
-    doc.setFont("times","bold"); doc.setFontSize(11);
+    doc.setFont("times","bold"); doc.setFontSize(11); doc.setTextColor(26,26,26);
     doc.text("Syarat & Ketentuan", margin, y); y += 0.2;
     doc.setDrawColor(180); doc.line(margin, y, W-margin, y); y += 0.6;
     doc.setFont("times","normal"); doc.setFontSize(9);
@@ -469,6 +639,8 @@ async function generatePDF(){
       doc.text(wrapped, margin+0.5, y);
       y += wrapped.length*0.38 + 0.15;
     });
+    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(85,85,85);
+    doc.text("Page : 2/2", W-margin, 28.5, { align:"right" });
 
     const safeName = (customer.name || "customer").replace(/[^\w\-]/g,"_");
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
@@ -499,7 +671,7 @@ async function generateDOCX(){
     const docKey = document.getElementById("docType").value;
     const prefix = DOC_TYPES[docKey].prefix;
     const judul  = DOC_TYPES[docKey].judul;
-    const num = await getNextNumber(prefix);
+    const num = await resolveDocNumber(prefix);
     document.getElementById("docNum").value = num;
     const dateStr = document.getElementById("docDate").value.trim() || todayStr();
     const customer = {
@@ -525,13 +697,16 @@ async function generateDOCX(){
       cellText("Harga Satuan", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
       cellText("Total", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
     ]});
-    const itemRows = cartItems.map((it,i) => new TableRow({ children: [
-      cellText(i+1, { align:AlignmentType.CENTER }),
-      cellText(it.name || "-"),
-      cellText(it.qty, { align:AlignmentType.CENTER }),
-      cellText(fmtRp(it.price), { align:AlignmentType.RIGHT }),
-      cellText(fmtRp(it.qty*it.price), { align:AlignmentType.RIGHT }),
-    ]}));
+    const itemRows = cartItems.map((it,i) => {
+      const stripe = i % 2 === 1 ? "f2f2f2" : undefined;
+      return new TableRow({ children: [
+        cellText(i+1, { align:AlignmentType.CENTER, fill:stripe }),
+        cellText(it.name || "-", { fill:stripe }),
+        cellText(it.qty, { align:AlignmentType.CENTER, fill:stripe }),
+        cellText(fmtRp(it.price), { align:AlignmentType.RIGHT, fill:stripe }),
+        cellText(fmtRp(it.qty*it.price), { align:AlignmentType.RIGHT, fill:stripe }),
+      ]});
+    });
     const blankCell = () => new TableCell({ children:[new Paragraph("")] });
     const totalRows = [
       new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
