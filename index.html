@@ -96,6 +96,33 @@
   }
   .setup summary{ cursor:pointer; color:var(--text); }
   .setup input{ margin-top:8px; }
+  .modal{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.65);
+    z-index:50; align-items:center; justify-content:center;
+  }
+  .modal-card{
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    width:92%; max-height:82vh; display:flex; flex-direction:column; padding:18px;
+  }
+  .modal-card.history{ max-width:900px; }
+  .modal-card.customer{ max-width:720px; }
+  .modal-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .modal-head h2{ margin:0; font-size:13px; color:var(--green); }
+  .icon-close{ background:none; border:none; color:var(--tdim); font-size:20px; cursor:pointer; }
+  .listbox{
+    overflow-y:auto; flex:1; margin-top:4px; background:var(--hdr);
+    border:1px solid var(--border); border-radius:8px; padding:6px;
+  }
+  .list-row{
+    padding:9px 12px; border-radius:4px; cursor:pointer; font-size:11px;
+    border-bottom:1px solid rgba(255,255,255,.04);
+  }
+  .list-row:nth-child(odd){ background:var(--hdr); }
+  .list-row:nth-child(even){ background:#161923; }
+  .list-row.selected{ background:var(--gdim); outline:1px solid var(--green); }
+  .list-title{ color:var(--text); font-weight:700; margin-bottom:4px; }
+  .list-detail{ color:var(--tdim); font-size:10px; line-height:1.4; }
+  .modal-actions{ display:flex; gap:8px; align-items:center; margin-top:10px; }
 </style>
 </head>
 <body>
@@ -186,7 +213,10 @@
     </div>
 
     <label>Nama Customer / Perusahaan</label>
-    <input id="custName" placeholder="PT Contoh Jaya">
+    <div style="display:flex; gap:6px;">
+      <input id="custName" placeholder="PT Contoh Jaya" style="flex:1;">
+      <button class="btn btn-outline" style="width:54px;height:34px;padding:0;margin:0;" onclick="openCustomerPicker()">Cari</button>
+    </div>
 
     <div class="row2">
       <div>
@@ -209,14 +239,35 @@
 </div>
 
 <!-- MODAL HISTORY -->
-<div id="historyModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:50; align-items:center; justify-content:center;">
-  <div style="background:var(--panel); border:1px solid var(--border); border-radius:10px; width:92%; max-width:720px; max-height:82vh; display:flex; flex-direction:column; padding:18px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <h2 style="margin:0; font-size:16px;">History Quotation</h2>
-      <button onclick="closeHistory()" style="background:none;border:none;color:var(--tdim);font-size:20px;cursor:pointer;">✕</button>
+<div id="historyModal" class="modal">
+  <div class="modal-card history">
+    <div class="modal-head">
+      <h2>HISTORY QUOTATION</h2>
+      <button onclick="closeHistory()" class="icon-close">x</button>
     </div>
     <input id="historySearch" placeholder="Cari nomor, nama customer, tanggal..." oninput="renderHistoryList()">
-    <div id="historyList" style="overflow-y:auto; flex:1; margin-top:4px;"></div>
+    <div id="historyList" class="listbox"></div>
+    <div class="modal-actions">
+      <button class="btn btn-green" style="width:auto;margin:0;" onclick="loadSelectedHistory()">Muat ke Editor</button>
+      <button class="btn btn-danger" style="width:auto;margin:0;" onclick="deleteSelectedHistory()">Hapus Entry</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;margin-left:auto;" onclick="loadHistoryEntries()">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CUSTOMER -->
+<div id="customerModal" class="modal">
+  <div class="modal-card customer">
+    <div class="modal-head">
+      <h2>DATA CUSTOMER</h2>
+      <button onclick="closeCustomerPicker()" class="icon-close">x</button>
+    </div>
+    <input id="customerSearch" placeholder="Cari nama customer, telepon, atau email..." oninput="renderCustomerList()">
+    <div id="customerList" class="listbox"></div>
+    <div class="modal-actions">
+      <button class="btn btn-green" style="width:auto;margin:0;" onclick="useSelectedCustomer()">Pakai Customer</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;margin-left:auto;" onclick="closeCustomerPicker()">Tutup</button>
+    </div>
   </div>
 </div>
 
@@ -411,6 +462,9 @@ function clearPosPaste(){
    HISTORY QUOTATION
 =============================================================== */
 let historyEntries = [];
+let selectedHistoryId = null;
+let customerEntries = [];
+let selectedCustomerKey = null;
 async function openHistory(){
   if(!sb){ alert("Hubungkan Supabase dulu (panel ⚙ di atas)."); return; }
   document.getElementById("historyModal").style.display = "flex";
@@ -473,6 +527,173 @@ async function deleteHistoryEntry(id){
   await loadHistoryEntries();
 }
 
+async function openHistory(){
+  if(!sb){ alert("Hubungkan Supabase dulu (panel koneksi di atas)."); return; }
+  document.getElementById("historyModal").style.display = "flex";
+  document.getElementById("historySearch").value = "";
+  document.getElementById("historyList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
+  await loadHistoryEntries();
+}
+async function loadHistoryEntries(){
+  const { data, error } = await sb.from("quotation_history")
+    .select("*").order("created_at", { ascending: false });
+  if(error){
+    document.getElementById("historyList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+  historyEntries = data || [];
+  selectedHistoryId = null;
+  renderHistoryList();
+}
+function historyLabel(entry){
+  const itemCount = (entry.items || []).length;
+  return `${entry.id || "?"}  |  ${entry.customer_name || "?"}  |  ${entry.doc_date || "?"}  |  ${itemCount} item`;
+}
+function renderHistoryList(){
+  const q = document.getElementById("historySearch").value.trim().toLowerCase();
+  const filtered = !q ? historyEntries : historyEntries.filter(e =>
+    (e.id||"").toLowerCase().includes(q) ||
+    (e.customer_name||"").toLowerCase().includes(q) ||
+    (e.doc_date||"").toLowerCase().includes(q) ||
+    (e.doc_type||"").toLowerCase().includes(q));
+  const list = document.getElementById("historyList");
+  if(filtered.length === 0){
+    list.innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:16px 0;">Belum ada history.</p>';
+    return;
+  }
+  list.innerHTML = filtered.map(e => `
+    <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}"
+      onclick="selectHistoryEntry(${JSON.stringify(e.id)})"
+      ondblclick="loadHistoryEntry(${JSON.stringify(e.id)})">
+      <div class="list-title">${escapeHtml(historyLabel(e))}</div>
+      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}</div>
+    </div>
+  `).join("");
+}
+function selectHistoryEntry(id){
+  selectedHistoryId = id;
+  renderHistoryList();
+}
+function loadSelectedHistory(){
+  if(!selectedHistoryId){ alert("Pilih entry terlebih dahulu."); return; }
+  loadHistoryEntry(selectedHistoryId);
+}
+function loadHistoryEntry(id){
+  const entry = historyEntries.find(e => e.id === id);
+  if(!entry) return;
+  document.getElementById("docType").value = entry.doc_type;
+  document.getElementById("docNum").value = entry.id;
+  document.getElementById("docDate").value = entry.doc_date;
+  document.getElementById("custName").value = entry.customer_name || "";
+  document.getElementById("custPhone").value = entry.customer_phone || "";
+  document.getElementById("custEmail").value = entry.customer_email || "";
+  document.getElementById("discount").value = entry.discount || 0;
+  cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
+  renderCart();
+  closeHistory();
+  setStatus(`Dimuat dari history: ${entry.id}. Nomor akan dipakai ulang jika langsung Generate.`, "ok");
+}
+async function deleteSelectedHistory(){
+  if(!selectedHistoryId){ alert("Pilih entry terlebih dahulu."); return; }
+  await deleteHistoryEntry(selectedHistoryId);
+}
+async function deleteHistoryEntry(id){
+  if(!confirm(`Hapus history ${id}?`)) return;
+  await sb.from("quotation_history").delete().eq("id", id);
+  selectedHistoryId = null;
+  await loadHistoryEntries();
+}
+
+async function openCustomerPicker(){
+  if(!sb){ alert("Hubungkan Supabase dulu (panel koneksi di atas)."); return; }
+  document.getElementById("customerModal").style.display = "flex";
+  document.getElementById("customerSearch").value = "";
+  document.getElementById("customerList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
+  await loadCustomerEntries();
+  setTimeout(() => document.getElementById("customerSearch").focus(), 0);
+}
+function closeCustomerPicker(){
+  document.getElementById("customerModal").style.display = "none";
+}
+async function loadCustomerEntries(){
+  if(!historyEntries.length){
+    const { data, error } = await sb.from("quotation_history")
+      .select("*").order("created_at", { ascending: false });
+    if(error){
+      document.getElementById("customerList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
+      return;
+    }
+    historyEntries = data || [];
+  }
+  customerEntries = buildUniqueCustomers(historyEntries);
+  selectedCustomerKey = null;
+  renderCustomerList();
+}
+function buildUniqueCustomers(entries){
+  const customers = {};
+  entries.forEach(entry => {
+    const name = (entry.customer_name || "").trim();
+    if(!name) return;
+    const key = name.toLowerCase();
+    if(!customers[key]){
+      customers[key] = {
+        key,
+        name,
+        phone: (entry.customer_phone || "").trim(),
+        email: (entry.customer_email || "").trim(),
+        last_date: entry.doc_date || "",
+        last_id: entry.id || "",
+        count: 0,
+      };
+    }
+    customers[key].count += 1;
+    if(!customers[key].phone && entry.customer_phone) customers[key].phone = entry.customer_phone.trim();
+    if(!customers[key].email && entry.customer_email) customers[key].email = entry.customer_email.trim();
+  });
+  return Object.values(customers).sort((a,b) => a.name.localeCompare(b.name, "id"));
+}
+function renderCustomerList(){
+  const q = document.getElementById("customerSearch").value.trim().toLowerCase();
+  const filtered = !q ? customerEntries : customerEntries.filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    (c.phone || "").toLowerCase().includes(q) ||
+    (c.email || "").toLowerCase().includes(q)
+  );
+  const list = document.getElementById("customerList");
+  if(filtered.length === 0){
+    list.innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:16px 0;">Belum ada customer di history.</p>';
+    return;
+  }
+  list.innerHTML = filtered.map(c => {
+    const detail = [c.phone, c.email, `${c.count} quotation`, c.last_id].filter(Boolean).join("  |  ");
+    return `
+      <div class="list-row ${c.key === selectedCustomerKey ? "selected" : ""}"
+        onclick="selectCustomer(${JSON.stringify(c.key)})"
+        ondblclick="useCustomer(${JSON.stringify(c.key)})">
+        <div class="list-title">${escapeHtml(c.name)}</div>
+        <div class="list-detail">${escapeHtml(detail || "Tidak ada detail kontak")}</div>
+      </div>
+    `;
+  }).join("");
+}
+function selectCustomer(key){
+  selectedCustomerKey = key;
+  renderCustomerList();
+}
+function useSelectedCustomer(){
+  if(!selectedCustomerKey){ alert("Pilih customer terlebih dahulu."); return; }
+  useCustomer(selectedCustomerKey);
+}
+function useCustomer(key){
+  const customer = customerEntries.find(c => c.key === key);
+  if(!customer) return;
+  document.getElementById("custName").value = customer.name || "";
+  document.getElementById("custPhone").value = customer.phone || "";
+  document.getElementById("custEmail").value = customer.email || "";
+  closeCustomerPicker();
+  setStatus(`Customer dimuat: ${customer.name}`, "ok");
+}
+
 /* ===============================================================
    NOMOR DOKUMEN (via Supabase counter, per prefix+bulan)
 =============================================================== */
@@ -531,6 +752,8 @@ async function saveHistory(num, docKey, customer, items, discount, dateStr){
       customer_name: customer.name, customer_phone: customer.phone, customer_email: customer.email,
       items: items, discount: discount, doc_date: dateStr,
     });
+    historyEntries = [];
+    customerEntries = [];
   }catch(e){ console.warn("Gagal simpan history:", e); }
 }
 
@@ -607,13 +830,13 @@ async function generatePDF(){
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
     const footRows = [
-      [{content:"Subtotal", colSpan:4, styles:{halign:"right", fontStyle:"bold"}},
+      [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB}},
        {content: fmtRp(sub), styles:{halign:"right", fontStyle:"bold"}}],
     ];
     if(discount>0){
       footRows.push([
-        {content:"Diskon", colSpan:4, styles:{halign:"right", fontStyle:"italic", textColor:[192,57,43]}},
-        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", textColor:[192,57,43]}},
+        {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
+        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
       ]);
     }
     footRows.push([
@@ -635,7 +858,7 @@ async function generatePDF(){
         3:{ cellWidth:CW*0.22, halign:"right" },
         4:{ cellWidth:CW*0.21, halign:"right" },
       },
-      footStyles: { fontSize:9, lineWidth:0, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
+      footStyles: { fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
       showFoot: "lastPage",
     });
     y = doc.lastAutoTable.finalY + 0.64;
