@@ -18,46 +18,51 @@
   :root{
     --bg:#0f1117; --panel:#1a1d27; --border:#2a2d3a;
     --green:#00c853; --gdim:#132a1c; --yellow:#ffd600;
-    --red:#ff3d3d; --text:#e8eaf0; --tdim:#6b7280; --hdr:#141720;
+    --red:#ff3d3d; --rdim:#2a171b; --text:#e8eaf0; --tdim:#6b7280; --hdr:#141720;
   }
   *{box-sizing:border-box;}
   body{
     margin:0; background:var(--bg); color:var(--text);
-    font-family:'Segoe UI',Arial,sans-serif; font-size:14px;
+    font-family:Consolas,'Segoe UI',Arial,sans-serif; font-size:14px;
   }
   header{
-    padding:16px 24px; background:var(--hdr); border-bottom:1px solid var(--border);
+    height:52px; padding:0 18px; background:var(--panel); border-bottom:1px solid var(--border);
     display:flex; align-items:center; justify-content:space-between;
   }
-  header h1{ font-size:17px; margin:0; font-weight:600; }
+  header h1{ font-size:15px; margin:0; font-weight:400; }
+  header h1 b{ color:var(--green); font-size:20px; }
   header .badge{ font-size:11px; color:var(--tdim); }
   .layout{
-    display:grid; grid-template-columns:1.3fr 1fr; gap:16px;
-    padding:20px; max-width:1300px; margin:0 auto;
+    display:grid; grid-template-columns:minmax(0,1.55fr) minmax(320px,.95fr); gap:12px;
+    padding:12px; max-width:1400px; margin:0 auto;
   }
-  @media (max-width: 900px){ .layout{ grid-template-columns:1fr; } }
+  @media (max-width: 920px){ .layout{ grid-template-columns:1fr; } }
   .panel{
     background:var(--panel); border:1px solid var(--border);
-    border-radius:10px; padding:18px;
+    border-radius:12px; padding:14px;
   }
   .panel h2{
-    font-size:14px; text-transform:uppercase; letter-spacing:.05em;
-    color:var(--tdim); margin:0 0 14px 0;
+    font-size:10px; text-transform:uppercase; letter-spacing:0;
+    color:var(--tdim); margin:0 0 10px 0; font-weight:700;
   }
-  label{ display:block; font-size:12px; color:var(--tdim); margin-bottom:4px; }
-  input, select{
-    width:100%; padding:8px 10px; background:#0f1117; border:1px solid var(--border);
-    border-radius:6px; color:var(--text); font-size:13px; margin-bottom:12px;
+  label{ display:block; font-size:10px; color:var(--tdim); margin-bottom:4px; }
+  input, select, textarea{
+    width:100%; padding:8px 10px; background:var(--bg); border:1px solid var(--border);
+    border-radius:6px; color:var(--text); font-family:Consolas,'Segoe UI',Arial,sans-serif;
+    font-size:12px; margin-bottom:10px;
   }
-  input:focus, select:focus{ outline:none; border-color:var(--green); }
+  textarea{ resize:vertical; min-height:78px; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--green); }
   .row{ display:grid; grid-template-columns:1fr; gap:0 12px; }
   .row2{ display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
-  .row4{ display:grid; grid-template-columns:2fr 0.7fr 1fr 0.4fr; gap:0 8px; align-items:start; }
+  .toolbar{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .toolbar .grow{ flex:1; }
 
   table{ width:100%; border-collapse:collapse; margin-bottom:10px; }
-  th{ text-align:left; font-size:11px; color:var(--tdim); padding:6px 4px; border-bottom:1px solid var(--border); }
-  td{ padding:6px 4px; border-bottom:1px solid var(--border); font-size:13px; }
-  td input{ margin-bottom:0; padding:5px 6px; font-size:12px; }
+  th{ text-align:left; font-size:11px; color:var(--tdim); padding:7px 6px; border-bottom:1px solid var(--border); }
+  td{ padding:6px; border-bottom:1px solid var(--border); font-size:12px; vertical-align:middle; }
+  td input{ margin-bottom:0; padding:6px 7px; font-size:12px; }
+  .num{ text-align:right; white-space:nowrap; color:var(--text); }
   .del-btn{
     background:var(--red); border:none; color:#fff; border-radius:5px;
     width:24px; height:24px; cursor:pointer; font-size:13px; line-height:1;
@@ -73,16 +78,18 @@
   .btn{
     padding:10px 14px; border:none; border-radius:7px; cursor:pointer;
     font-size:13px; font-weight:600; width:100%; margin-bottom:8px;
+    font-family:Consolas,'Segoe UI',Arial,sans-serif;
   }
   .btn-green{ background:var(--green); color:#04170a; }
   .btn-outline{ background:transparent; border:1px solid var(--green); color:var(--green); }
+  .btn-danger{ background:transparent; border:1px solid var(--red); color:var(--red); }
   .btn:disabled{ opacity:.5; cursor:not-allowed; }
 
   #status{ font-size:12px; margin-top:10px; min-height:16px; }
   .ok{ color:var(--green); } .err{ color:var(--red); } .warn{ color:var(--yellow); }
 
   .setup{
-    max-width:1300px; margin:16px auto 0; padding:0 20px;
+    max-width:1400px; margin:12px auto 0; padding:0 12px;
   }
   .setup details{
     background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--tdim);
@@ -94,10 +101,10 @@
 <body>
 
 <header>
-  <h1>EK Quotation Generator</h1>
+  <h1><b>EK</b> AI Quotation Generator</h1>
   <div style="display:flex; align-items:center; gap:14px;">
     <button class="btn btn-outline" style="width:auto; padding:7px 14px; margin:0;" onclick="openHistory()">📜 History</button>
-    <span class="badge">Enterkomputer &middot; Formal Letter</span>
+    <span class="badge">Generator quotation sales</span>
   </div>
 </header>
 
@@ -115,23 +122,25 @@
 
 <div class="layout">
 
-  <!-- PANEL TENGAH: CART -->
+  <!-- PANEL UTAMA: CART -->
   <div class="panel">
-    <h2>Cart / Daftar Item</h2>
-
-    <label>Paste Teks dari POS (opsional)</label>
-    <textarea id="posPasteArea" rows="3"
-      placeholder="1 unit RTX 5070 (1 x @12.000.000 = Rp 12.000.000)"
-      style="width:100%;background:#0f1117;border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:8px;margin-bottom:6px;resize:vertical;"></textarea>
-    <div style="display:flex; gap:8px; margin-bottom:6px;">
-      <button class="btn btn-outline" style="width:auto;flex:1;margin:0;" onclick="parsePosPaste()">📋 Parse &amp; Tambah ke Cart</button>
-      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="clearPosPaste()">Bersihkan</button>
+    <div class="toolbar">
+      <h2 class="grow" style="margin:0;">Cart</h2>
+      <button class="btn btn-danger" style="width:auto;height:26px;padding:4px 10px;margin:0;font-size:10px;" onclick="clearCart()">Kosongkan</button>
     </div>
-    <div id="posPasteStatus" style="font-size:12px; margin-bottom:14px; min-height:14px;"></div>
+
+    <label>Paste Text POS  ->  Add To Cart</label>
+    <textarea id="posPasteArea" rows="3"
+      placeholder="Format POS: 1 unit RTX 5070 (1 x @12.000.000 = Rp 12.000.000)"></textarea>
+    <div class="toolbar">
+      <button class="btn btn-green" style="width:140px;margin:0;" onclick="parsePosPaste()">Add to Cart</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="clearPosPaste()">Bersihkan</button>
+      <div id="posPasteStatus" class="grow" style="font-size:12px; min-height:14px; text-align:right;"></div>
+    </div>
 
     <table id="cartTable">
       <thead>
-        <tr><th>Nama Item</th><th>Qty</th><th>Harga Satuan</th><th></th></tr>
+        <tr><th>Produk</th><th style="width:80px;">Jml</th><th style="width:150px;">Harga</th><th style="width:150px;text-align:right;">Total</th><th style="width:34px;"></th></tr>
       </thead>
       <tbody id="cartBody"></tbody>
     </table>
@@ -160,10 +169,15 @@
       <option value="Proforma Invoice">Proforma Invoice (EK-PI)</option>
     </select>
 
+    <label>Template PDF</label>
+    <select id="pdfTemplate">
+      <option value="Formal Letter">Formal Letter</option>
+    </select>
+
     <div class="row2">
       <div>
-        <label>No. Dokumen (preview)</label>
-        <input id="docNum" readonly>
+        <label>Nomor Dokumen (auto)</label>
+        <input id="docNum">
       </div>
       <div>
         <label>Tanggal</label>
@@ -186,8 +200,8 @@
     </div>
 
     <div style="margin-top:16px;">
-      <button class="btn btn-green" id="btnPdf" onclick="generatePDF()">📄 Generate PDF</button>
-      <button class="btn btn-outline" id="btnDocx" onclick="generateDOCX()">📝 Generate DOCX</button>
+      <button class="btn btn-green" id="btnPdf" onclick="generatePDF()">PDF</button>
+      <button class="btn btn-outline" id="btnDocx" onclick="generateDOCX()">DOCX</button>
     </div>
 
     <div id="status"></div>
@@ -298,12 +312,21 @@ function removeItem(id){
   cartItems = cartItems.filter(i => i.id !== id);
   renderCart();
 }
+function clearCart(){
+  if(!cartItems.length && !document.getElementById("custName").value.trim()) return;
+  if(!confirm("Hapus semua item cart dan kosongkan data customer?")) return;
+  cartItems = [];
+  ["custName","custPhone","custEmail"].forEach(id => document.getElementById(id).value = "");
+  document.getElementById("discount").value = 0;
+  addItem();
+  setStatus("Cart dan data customer dikosongkan.", "");
+}
 function updateItem(id, field, value){
   const it = cartItems.find(i => i.id === id);
   if(!it) return;
   if(field === "qty" || field === "price") it[field] = Number(value) || 0;
   else it[field] = value;
-  renderCart(true); // skip full re-render focus loss on totals-only fields is fine, but keep simple
+  renderCart();
 }
 function renderCart(skipRebuildInputs){
   const body = document.getElementById("cartBody");
@@ -315,7 +338,8 @@ function renderCart(skipRebuildInputs){
         <td><input value="${escapeHtml(it.name)}" oninput="updateItem(${it.id},'name',this.value)" placeholder="Nama produk"></td>
         <td><input type="number" min="1" value="${it.qty}" oninput="updateItem(${it.id},'qty',this.value)"></td>
         <td><input type="number" min="0" value="${it.price}" oninput="updateItem(${it.id},'price',this.value)"></td>
-        <td><button class="del-btn" onclick="removeItem(${it.id})">✕</button></td>
+        <td class="num">${fmtRp((Number(it.qty)||0) * (Number(it.price)||0))}</td>
+        <td><button class="del-btn" onclick="removeItem(${it.id})">x</button></td>
       `;
       body.appendChild(tr);
     });
@@ -536,40 +560,48 @@ async function generatePDF(){
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "cm", format: "a4" });
-    const W = 21.0, margin = 2.0, CW = W - margin*2;
-    let y = 1.6;
+    const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
+    const FB = [26,26,26], FG = [85,85,85], FL = [242,242,242], FN = [153,153,153];
+    const FV = [26,122,46], FR = [192,57,43];
+    let y = 1.5;
 
-    const kopH = CW / 4.91; // rasio asli gambar kop (594x121)
+    const kopH = CW / 4.91;
     doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH);
-    y += kopH + 0.25;
-    doc.setDrawColor(26,26,26); doc.setLineWidth(0.04);
+    y += kopH;
+    doc.setDrawColor(...FB); doc.setLineWidth(0.07);
     doc.line(margin, y, W-margin, y);
-    y += 0.55;
+    y += 0.42;
 
-    doc.setFont("times","normal"); doc.setFontSize(10);
-    doc.text(`No. : ${num}`, margin, y);
-    doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
-    y += 0.45;
-    doc.setDrawColor(150); doc.line(margin, y, W-margin, y);
-    y += 0.9;
+    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+    doc.text(`No. : `, margin, y);
+    doc.setFont("times","bold"); doc.text(num, margin + 1.05, y);
+    doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
+    y += 0.25;
+    doc.setDrawColor(...FN); doc.setLineWidth(0.02);
+    doc.line(margin, y, W-margin, y);
+    y += 0.75;
 
-    doc.setFont("times","bold"); doc.setFontSize(13);
+    doc.setFont("times","bold"); doc.setFontSize(13); doc.setTextColor(...FB);
     doc.text(judul.toUpperCase(), W/2, y, { align:"center" });
+    y += 0.22;
+    doc.setDrawColor(...FV); doc.setLineWidth(0.05);
+    doc.line(W/2 - (CW*0.4)/2, y, W/2 + (CW*0.4)/2, y);
     y += 0.7;
 
-    doc.setFont("times","normal"); doc.setFontSize(10);
-    doc.text("Kepada Yth.", margin, y); y += 0.45;
-    doc.setFont("times","bold"); doc.text(customer.name || "-", margin, y); y += 0.45;
+    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+    doc.text("Kepada Yth.", margin, y); y += 0.48;
+    doc.setFont("times","bold"); doc.text(customer.name || "-", margin, y); y += 0.48;
     doc.setFont("times","normal");
-    if(customer.phone){ doc.text(`No. Telepon : ${customer.phone}`, margin, y); y += 0.45; }
-    if(customer.email){ doc.text(`Email           : ${customer.email}`, margin, y); y += 0.45; }
-    doc.text("di Tempat", margin, y); y += 0.6;
+    if(customer.phone){ doc.text(`No. Telepon : ${customer.phone}`, margin, y); y += 0.48; }
+    if(customer.email){ doc.text(`Email           : ${customer.email}`, margin, y); y += 0.48; }
+    doc.text("di Tempat", margin, y); y += 0.72;
 
+    doc.text("Dengan hormat,", margin, y); y += 0.48;
     const opening = docKey === "Proforma Invoice"
-      ? "Dengan hormat, bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
-      : "Dengan hormat, bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
+      ? "Bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
+      : "Bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
     const openLines = doc.splitTextToSize(opening, CW);
-    doc.text(openLines, margin, y); y += openLines.length*0.42 + 0.3;
+    doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
 
     const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
@@ -593,61 +625,63 @@ async function generatePDF(){
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
       body: body,
       foot: footRows,
-      styles: { font:"times", fontSize:9, textColor:[26,26,26], lineColor:[153,153,153], lineWidth:0.01 },
-      headStyles: { fillColor:[26,26,26], textColor:255, fontStyle:"bold", fontSize:9 },
-      alternateRowStyles: { fillColor:[242,242,242] },
+      styles: { font:"times", fontSize:9, textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
+      headStyles: { fillColor:FB, textColor:255, fontStyle:"bold", fontSize:9, cellPadding:{top:0.25,right:0.21,bottom:0.25,left:0.21} },
+      alternateRowStyles: { fillColor:FL },
       columnStyles: {
-        0:{ cellWidth:1, halign:"center" }, 2:{ cellWidth:1.5, halign:"center" },
-        3:{ halign:"right" }, 4:{ halign:"right" },
+        0:{ cellWidth:CW*0.05, halign:"center" },
+        1:{ cellWidth:CW*0.45 },
+        2:{ cellWidth:CW*0.07, halign:"center" },
+        3:{ cellWidth:CW*0.22, halign:"right" },
+        4:{ cellWidth:CW*0.21, halign:"right" },
       },
-      footStyles: { fontSize:9, lineWidth:0 },
+      footStyles: { fontSize:9, lineWidth:0, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
       showFoot: "lastPage",
     });
-    y = doc.lastAutoTable.finalY + 0.8;
+    y = doc.lastAutoTable.finalY + 0.64;
 
-    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(26,26,26);
-    doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.5;
-    doc.setFont("times","bold");
-    doc.text("Bank BCA", margin, y);
-    doc.setTextColor(26,122,46);
-    doc.text("693-0310-105  a/n  CV TEMAN BAIK", margin+3.5, y); y += 0.5;
-    doc.setTextColor(26,26,26);
-    doc.text("Bank Mandiri", margin, y);
-    doc.setTextColor(26,122,46);
-    doc.text("1200012717422  a/n  CV TEMAN BAIK", margin+3.5, y);
-    doc.setTextColor(26,26,26);
-    y += 0.7;
+    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+    doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
+    doc.autoTable({
+      startY: y, margin:{ left:margin, right:margin },
+      body: [
+        ["Bank BCA", "693-0310-105  a/n  CV TEMAN BAIK"],
+        ["Bank Mandiri", "1200012717422  a/n  CV TEMAN BAIK"],
+      ],
+      theme:"grid",
+      styles:{ font:"times", fontSize:10, fillColor:FL, textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.21,right:0.35,bottom:0.21,left:0.35} },
+      columnStyles:{ 0:{ cellWidth:CW*0.25, fontStyle:"bold" }, 1:{ cellWidth:CW*0.75, fontStyle:"bold", textColor:FV } },
+    });
+    y = doc.lastAutoTable.finalY + 0.56;
 
-    doc.setFont("times","normal"); doc.setFontSize(10);
-    doc.text("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.", margin, y, { maxWidth: CW }); y += 0.6;
+    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+    doc.text("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.", margin, y, { maxWidth: CW }); y += 0.62;
     doc.text("Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih.", margin, y, { maxWidth: CW });
-    y += 0.5;
-    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(85,85,85);
-    doc.text("Page : 1/2", W-margin, 28.5, { align:"right" });
-    doc.setTextColor(26,26,26);
-
-    y += 0.6;
-    const capW = 3.5, capH = capW * (119/207);
-    doc.addImage(CAP_IMG, "JPEG", margin, y, capW, capH);
+    y += 0.78;
+    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(...FG);
+    doc.text("Page : 1/2", W-margin, y, { align:"right" });
 
     // Halaman 2: Syarat & Ketentuan
     doc.addPage();
-    y = 1.6;
+    y = 1.5;
     doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH);
-    y += kopH + 0.25;
-    doc.setDrawColor(26,26,26); doc.line(margin, y, W-margin, y);
-    y += 0.6;
-    doc.setFont("times","bold"); doc.setFontSize(11); doc.setTextColor(26,26,26);
-    doc.text("Syarat & Ketentuan", margin, y); y += 0.2;
-    doc.setDrawColor(180); doc.line(margin, y, W-margin, y); y += 0.6;
-    doc.setFont("times","normal"); doc.setFontSize(9);
+    y += kopH;
+    doc.setDrawColor(...FB); doc.setLineWidth(0.07); doc.line(margin, y, W-margin, y);
+    y += 0.68;
+    doc.setFont("times","bold"); doc.setFontSize(11); doc.setTextColor(...FB);
+    doc.text("Syarat & Ketentuan", margin, y); y += 0.22;
+    doc.setDrawColor(...FN); doc.setLineWidth(0.02); doc.line(margin, y, W-margin, y); y += 0.48;
+    doc.setFont("times","normal"); doc.setFontSize(9); doc.setTextColor(...FB);
     SYARAT_ISI.forEach((line, i) => {
       const wrapped = doc.splitTextToSize(`${i+1}.  ${line}`, CW-0.5);
       doc.text(wrapped, margin+0.5, y);
-      y += wrapped.length*0.38 + 0.15;
+      y += wrapped.length*0.44 + 0.14;
     });
-    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(85,85,85);
-    doc.text("Page : 2/2", W-margin, 28.5, { align:"right" });
+    y += 1.0;
+    const capW = 3.5, capH = 2.0;
+    doc.addImage(CAP_IMG, "JPEG", margin, Math.min(y, H - 4.4), capW, capH);
+    doc.setFont("times","italic"); doc.setFontSize(8); doc.setTextColor(...FG);
+    doc.text("Page : 2/2", W-margin, H - 2.0, { align:"right" });
 
     const safeName = (customer.name || "customer").replace(/[^\w\-]/g,"_");
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
@@ -660,7 +694,7 @@ async function generatePDF(){
     console.error(e);
     setStatus(`❌ Gagal generate PDF: ${e.message}`, "err");
   }finally{
-    btn.disabled = false; btn.textContent = "📄 Generate PDF";
+    btn.disabled = false; btn.textContent = "PDF";
   }
 }
 
@@ -796,7 +830,7 @@ async function generateDOCX(){
     console.error(e);
     setStatus(`❌ Gagal generate DOCX: ${e.message}`, "err");
   }finally{
-    btn.disabled = false; btn.textContent = "📝 Generate DOCX";
+    btn.disabled = false; btn.textContent = "DOCX";
   }
 }
 
