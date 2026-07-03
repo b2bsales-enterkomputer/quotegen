@@ -737,17 +737,24 @@ function renderHistoryList(){
     return;
   }
   list.innerHTML = filtered.map(e => `
-    <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}"
-      onclick="selectHistoryEntry(${JSON.stringify(e.id)})"
-      ondblclick="loadHistoryEntry(${JSON.stringify(e.id)})">
+    <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}" data-history-id="${escapeHtml(e.id || "")}">
       <div class="list-title">${escapeHtml(historyLabel(e))}</div>
       <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}</div>
     </div>
   `).join("");
+  bindHistoryRowEvents();
+}
+function bindHistoryRowEvents(){
+  document.querySelectorAll("#historyList .list-row").forEach(row => {
+    row.addEventListener("click", () => selectHistoryEntry(row.dataset.historyId));
+    row.addEventListener("dblclick", () => loadHistoryEntry(row.dataset.historyId));
+  });
 }
 function selectHistoryEntry(id){
   selectedHistoryId = id;
-  renderHistoryList();
+  document.querySelectorAll("#historyList .list-row").forEach(row => {
+    row.classList.toggle("selected", row.dataset.historyId === id);
+  });
 }
 function loadSelectedHistory(){
   if(!selectedHistoryId){ alert("Pilih entry terlebih dahulu."); return; }
