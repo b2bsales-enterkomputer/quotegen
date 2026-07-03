@@ -16,9 +16,9 @@
 
 <style>
   :root{
-    --bg:#0f1117; --panel:#1a1d27; --border:#2a2d3a;
-    --green:#00c853; --gdim:#132a1c; --yellow:#ffd600;
-    --red:#ff3d3d; --rdim:#2a171b; --text:#e8eaf0; --tdim:#6b7280; --hdr:#141720;
+    --bg:#f4f7fb; --panel:#ffffff; --border:#d7dde8;
+    --green:#16833a; --gdim:#e8f7ed; --yellow:#b77900;
+    --red:#d92d20; --rdim:#fff1f0; --text:#17202a; --tdim:#667085; --hdr:#f8fafc;
   }
   *{box-sizing:border-box;}
   body{
@@ -39,7 +39,7 @@
   @media (max-width: 920px){ .layout{ grid-template-columns:1fr; } }
   .panel{
     background:var(--panel); border:1px solid var(--border);
-    border-radius:12px; padding:14px;
+    border-radius:12px; padding:14px; box-shadow:0 8px 24px rgba(16,24,40,.06);
   }
   .panel h2{
     font-size:10px; text-transform:uppercase; letter-spacing:0;
@@ -47,7 +47,7 @@
   }
   label{ display:block; font-size:10px; color:var(--tdim); margin-bottom:4px; }
   input, select, textarea{
-    width:100%; padding:8px 10px; background:var(--bg); border:1px solid var(--border);
+    width:100%; padding:8px 10px; background:#fff; border:1px solid var(--border);
     border-radius:6px; color:var(--text); font-family:Consolas,'Segoe UI',Arial,sans-serif;
     font-size:12px; margin-bottom:10px;
   }
@@ -80,7 +80,7 @@
     font-size:13px; font-weight:600; width:100%; margin-bottom:8px;
     font-family:Consolas,'Segoe UI',Arial,sans-serif;
   }
-  .btn-green{ background:var(--green); color:#04170a; }
+  .btn-green{ background:var(--green); color:#fff; }
   .btn-outline{ background:transparent; border:1px solid var(--green); color:var(--green); }
   .btn-danger{ background:transparent; border:1px solid var(--red); color:var(--red); }
   .btn:disabled{ opacity:.5; cursor:not-allowed; }
@@ -93,11 +93,12 @@
   }
   .setup details{
     background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-size:12px; color:var(--tdim);
+    box-shadow:0 8px 24px rgba(16,24,40,.05);
   }
   .setup summary{ cursor:pointer; color:var(--text); }
   .setup input{ margin-top:8px; }
   .modal{
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,.65);
+    display:none; position:fixed; inset:0; background:rgba(15,23,42,.35);
     z-index:50; align-items:center; justify-content:center;
   }
   .modal-card{
@@ -116,10 +117,10 @@
   }
   .list-row{
     padding:9px 12px; border-radius:4px; cursor:pointer; font-size:11px;
-    border-bottom:1px solid rgba(255,255,255,.04);
+    border-bottom:1px solid rgba(16,24,40,.06);
   }
   .list-row:nth-child(odd){ background:var(--hdr); }
-  .list-row:nth-child(even){ background:#161923; }
+  .list-row:nth-child(even){ background:#fff; }
   .list-row.selected{ background:var(--gdim); outline:1px solid var(--green); }
   .list-title{ color:var(--text); font-weight:700; margin-bottom:4px; }
   .list-detail{ color:var(--tdim); font-size:10px; line-height:1.4; }
