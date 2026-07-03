@@ -867,18 +867,25 @@ function renderCustomerList(){
   list.innerHTML = filtered.map(c => {
     const detail = [c.phone, c.email, `${c.count} quotation`, c.last_id].filter(Boolean).join("  |  ");
     return `
-      <div class="list-row ${c.key === selectedCustomerKey ? "selected" : ""}"
-        onclick="selectCustomer(${JSON.stringify(c.key)})"
-        ondblclick="useCustomer(${JSON.stringify(c.key)})">
+      <div class="list-row ${c.key === selectedCustomerKey ? "selected" : ""}" data-customer-key="${escapeHtml(c.key || "")}">
         <div class="list-title">${escapeHtml(c.name)}</div>
         <div class="list-detail">${escapeHtml(detail || "Tidak ada detail kontak")}</div>
       </div>
     `;
   }).join("");
+  bindCustomerRowEvents();
+}
+function bindCustomerRowEvents(){
+  document.querySelectorAll("#customerList .list-row").forEach(row => {
+    row.addEventListener("click", () => selectCustomer(row.dataset.customerKey));
+    row.addEventListener("dblclick", () => useCustomer(row.dataset.customerKey));
+  });
 }
 function selectCustomer(key){
   selectedCustomerKey = key;
-  renderCustomerList();
+  document.querySelectorAll("#customerList .list-row").forEach(row => {
+    row.classList.toggle("selected", row.dataset.customerKey === key);
+  });
 }
 function useSelectedCustomer(){
   if(!selectedCustomerKey){ alert("Pilih customer terlebih dahulu."); return; }
