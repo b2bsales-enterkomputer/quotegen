@@ -475,7 +475,13 @@ function updateItem(id, field, value){
   if(!it) return;
   if(field === "qty" || field === "price") it[field] = Number(value) || 0;
   else it[field] = value;
-  renderCart();
+  updateLineTotal(id);
+  renderCart(true);
+}
+function updateLineTotal(id){
+  const it = cartItems.find(i => i.id === id);
+  const el = document.querySelector(`[data-total-id="${id}"]`);
+  if(it && el) el.textContent = fmtRp((Number(it.qty)||0) * (Number(it.price)||0));
 }
 function renderCart(skipRebuildInputs){
   const body = document.getElementById("cartBody");
@@ -487,7 +493,7 @@ function renderCart(skipRebuildInputs){
         <td><input value="${escapeHtml(it.name)}" oninput="updateItem(${it.id},'name',this.value)" placeholder="Nama produk"></td>
         <td><input type="number" min="1" value="${it.qty}" oninput="updateItem(${it.id},'qty',this.value)"></td>
         <td><input type="number" min="0" value="${it.price}" oninput="updateItem(${it.id},'price',this.value)"></td>
-        <td class="num">${fmtRp((Number(it.qty)||0) * (Number(it.price)||0))}</td>
+        <td class="num" data-total-id="${it.id}">${fmtRp((Number(it.qty)||0) * (Number(it.price)||0))}</td>
         <td style="white-space:nowrap;">
           <button class="mini-btn" onclick="moveItem(${it.id},-1)" title="Naik">↑</button>
           <button class="mini-btn" onclick="moveItem(${it.id},1)" title="Turun">↓</button>
@@ -939,15 +945,6 @@ function setStatus(msg, cls){
   el.textContent = msg;
   el.className = cls || "";
 }
-function drawSubtotalSeparator(data){
-  if(data.section !== "foot" || data.row.index !== 0 || data.column.index !== 0) return;
-  const doc = data.doc;
-  const startX = data.cell.x;
-  const endX = startX + data.table.columns.reduce((sum, col) => sum + col.width, 0);
-  doc.setDrawColor(153, 153, 153);
-  doc.setLineWidth(0.02);
-  doc.line(startX, data.cell.y, endX, data.cell.y);
-}
 async function saveHistory(num, docKey, customer, items, discount, dateStr){
   const { error } = await sb.from("quotation_history").insert({
     id: num,
@@ -1013,17 +1010,17 @@ async function previewPDF(){
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
   const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
   const footRows = [
-    [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB}}, {content:fmtRp(sub), styles:{halign:"right", fontStyle:"bold"}}],
+    [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01}}, {content:fmtRp(sub), styles:{halign:"right", fontStyle:"bold", lineColor:FN, lineWidth:0.01}}],
   ];
   if(discount>0){
     footRows.push([
-      {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
-      {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
+      {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
+      {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
     ]);
   }
   footRows.push([
-    {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV}},
-    {content:fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV}},
+    {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV, lineColor:FB, lineWidth:0.01}},
+    {content:fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV, lineColor:FB, lineWidth:0.01}},
   ]);
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
@@ -1033,9 +1030,8 @@ async function previewPDF(){
     headStyles:{fillColor:FB, textColor:255, fontStyle:"bold"},
     alternateRowStyles:{fillColor:FL},
     columnStyles:{0:{cellWidth:CW*0.05,halign:"center"},1:{cellWidth:CW*0.45},2:{cellWidth:CW*0.07,halign:"center"},3:{cellWidth:CW*0.22,halign:"right"},4:{cellWidth:CW*0.21,halign:"right"}},
-    footStyles:{fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0},
+    footStyles:{fillColor:[255,255,255], textColor:FB, fontSize:9, lineColor:FN, lineWidth:0.01},
     showFoot:"lastPage",
-    didDrawCell: drawSubtotalSeparator,
   });
   y = doc.lastAutoTable.finalY + 0.64;
   doc.setFont("times","normal"); doc.setFontSize(10); doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
@@ -1141,18 +1137,18 @@ async function generatePDF(){
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
     const footRows = [
-      [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB}},
-       {content: fmtRp(sub), styles:{halign:"right", fontStyle:"bold"}}],
+      [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01}},
+       {content: fmtRp(sub), styles:{halign:"right", fontStyle:"bold", lineColor:FN, lineWidth:0.01}}],
     ];
     if(discount>0){
       footRows.push([
-        {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
-        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR}},
+        {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
+        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
       ]);
     }
     footRows.push([
-      {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46]}},
-      {content: fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46]}},
+      {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46], lineColor:FB, lineWidth:0.01}},
+      {content: fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46], lineColor:FB, lineWidth:0.01}},
     ]);
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
@@ -1169,9 +1165,8 @@ async function generatePDF(){
         3:{ cellWidth:CW*0.22, halign:"right" },
         4:{ cellWidth:CW*0.21, halign:"right" },
       },
-      footStyles: { fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
+      footStyles: { fillColor:[255,255,255], textColor:FB, fontSize:9, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
       showFoot: "lastPage",
-      didDrawCell: drawSubtotalSeparator,
     });
     y = doc.lastAutoTable.finalY + 0.64;
 
