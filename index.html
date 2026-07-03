@@ -939,6 +939,15 @@ function setStatus(msg, cls){
   el.textContent = msg;
   el.className = cls || "";
 }
+function drawSubtotalSeparator(data){
+  if(data.section !== "foot" || data.row.index !== 0 || data.column.index !== 0) return;
+  const doc = data.doc;
+  const startX = data.cell.x;
+  const endX = startX + data.table.columns.reduce((sum, col) => sum + col.width, 0);
+  doc.setDrawColor(153, 153, 153);
+  doc.setLineWidth(0.02);
+  doc.line(startX, data.cell.y, endX, data.cell.y);
+}
 async function saveHistory(num, docKey, customer, items, discount, dateStr){
   const { error } = await sb.from("quotation_history").insert({
     id: num,
@@ -1026,6 +1035,7 @@ async function previewPDF(){
     columnStyles:{0:{cellWidth:CW*0.05,halign:"center"},1:{cellWidth:CW*0.45},2:{cellWidth:CW*0.07,halign:"center"},3:{cellWidth:CW*0.22,halign:"right"},4:{cellWidth:CW*0.21,halign:"right"}},
     footStyles:{fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0},
     showFoot:"lastPage",
+    didDrawCell: drawSubtotalSeparator,
   });
   y = doc.lastAutoTable.finalY + 0.64;
   doc.setFont("times","normal"); doc.setFontSize(10); doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
@@ -1161,6 +1171,7 @@ async function generatePDF(){
       },
       footStyles: { fillColor:[255,255,255], textColor:FB, fontSize:9, lineWidth:0, cellPadding:{top:0.18,right:0.21,bottom:0.18,left:0.21} },
       showFoot: "lastPage",
+      didDrawCell: drawSubtotalSeparator,
     });
     y = doc.lastAutoTable.finalY + 0.64;
 
