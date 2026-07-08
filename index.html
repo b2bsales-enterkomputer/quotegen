@@ -659,65 +659,6 @@ async function loadHistoryEntries(){
     return;
   }
   historyEntries = data || [];
-  renderHistoryList();
-}
-function renderHistoryList(){
-  const q = document.getElementById("historySearch").value.trim().toLowerCase();
-  const filtered = !q ? historyEntries : historyEntries.filter(e =>
-    (e.id||"").toLowerCase().includes(q) ||
-    (e.customer_name||"").toLowerCase().includes(q) ||
-    (e.doc_date||"").toLowerCase().includes(q) ||
-    (e.doc_type||"").toLowerCase().includes(q));
-  const list = document.getElementById("historyList");
-  if(filtered.length === 0){
-    list.innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:16px 0;">Belum ada history.</p>';
-    return;
-  }
-  list.innerHTML = filtered.map(e => `
-    <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 4px; border-bottom:1px solid var(--border); font-size:12px;">
-      <div style="cursor:pointer;flex:1;" onclick="loadHistoryEntry(${JSON.stringify(e.id)})">
-        <b>${escapeHtml(e.id)}</b> &middot; ${escapeHtml(e.customer_name)} &middot; ${escapeHtml(e.doc_date)} &middot; ${(e.items||[]).length} item &middot; ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}
-      </div>
-      <button class="del-btn" onclick="deleteHistoryEntry(${JSON.stringify(e.id)})">✕</button>
-    </div>
-  `).join("");
-}
-function loadHistoryEntry(id){
-  const entry = historyEntries.find(e => e.id === id);
-  if(!entry) return;
-  document.getElementById("docType").value = entry.doc_type;
-  document.getElementById("docNum").value = entry.id;
-  document.getElementById("docDate").value = entry.doc_date;
-  document.getElementById("custName").value = entry.customer_name || "";
-  document.getElementById("custPhone").value = entry.customer_phone || "";
-  document.getElementById("custEmail").value = entry.customer_email || "";
-  document.getElementById("discount").value = entry.discount || 0;
-  cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
-  renderCart();
-  closeHistory();
-  setStatus(`📂 Dimuat dari history: ${entry.id} — nomor akan dipakai ulang jika langsung Generate.`, "ok");
-}
-async function deleteHistoryEntry(id){
-  if(!confirm(`Hapus history ${id}?`)) return;
-  await sb.from("quotation_history").delete().eq("id", id).eq("owner_id", currentUser.id);
-  await loadHistoryEntries();
-}
-
-async function openHistory(){
-  if(!requireSupabaseAuth()) return;
-  document.getElementById("historyModal").style.display = "flex";
-  document.getElementById("historySearch").value = "";
-  document.getElementById("historyList").innerHTML = '<p style="color:var(--tdim);font-size:12px;">Memuat...</p>';
-  await loadHistoryEntries();
-}
-async function loadHistoryEntries(){
-  const { data, error } = await sb.from("quotation_history")
-    .select("*").eq("owner_id", currentUser.id).order("created_at", { ascending: false });
-  if(error){
-    document.getElementById("historyList").innerHTML = `<p class="err" style="font-size:12px;">Gagal load: ${escapeHtml(error.message)}</p>`;
-    return;
-  }
-  historyEntries = data || [];
   selectedHistoryId = null;
   renderHistoryList();
 }
@@ -743,12 +684,20 @@ function renderHistoryList(){
       <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}</div>
     </div>
   `).join("");
-  bindHistoryRowEvents();
 }
-function bindHistoryRowEvents(){
-  document.querySelectorAll("#historyList .list-row").forEach(row => {
-    row.addEventListener("click", () => selectHistoryEntry(row.dataset.historyId));
-    row.addEventListener("dblclick", () => loadHistoryEntry(row.dataset.historyId));
+function initHistoryListEvents(){
+  const list = document.getElementById("historyList");
+  if(list.dataset.delegated) return; // pasang cuma sekali
+  list.dataset.delegated = "1";
+  list.addEventListener("click", (e) => {
+    const row = e.target.closest(".list-row");
+    if(!row) return;
+    selectHistoryEntry(row.dataset.historyId);
+  });
+  list.addEventListener("dblclick", (e) => {
+    const row = e.target.closest(".list-row");
+    if(!row) return;
+    loadHistoryEntry(row.dataset.historyId);
   });
 }
 function selectHistoryEntry(id){
@@ -873,12 +822,20 @@ function renderCustomerList(){
       </div>
     `;
   }).join("");
-  bindCustomerRowEvents();
 }
-function bindCustomerRowEvents(){
-  document.querySelectorAll("#customerList .list-row").forEach(row => {
-    row.addEventListener("click", () => selectCustomer(row.dataset.customerKey));
-    row.addEventListener("dblclick", () => useCustomer(row.dataset.customerKey));
+function initCustomerListEvents(){
+  const list = document.getElementById("customerList");
+  if(list.dataset.delegated) return; // pasang cuma sekali
+  list.dataset.delegated = "1";
+  list.addEventListener("click", (e) => {
+    const row = e.target.closest(".list-row");
+    if(!row) return;
+    selectCustomer(row.dataset.customerKey);
+  });
+  list.addEventListener("dblclick", (e) => {
+    const row = e.target.closest(".list-row");
+    if(!row) return;
+    useCustomer(row.dataset.customerKey);
   });
 }
 function selectCustomer(key){
@@ -1386,6 +1343,8 @@ window.onload = () => {
   document.getElementById("docDate").value = todayStr();
   bindAutosave();
   loadConfig();
+  initHistoryListEvents();
+  initCustomerListEvents();
   if(!loadDraft()) addItem(); // 1 baris kosong biar langsung bisa isi
 };
 </script>
