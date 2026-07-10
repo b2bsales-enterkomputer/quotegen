@@ -203,7 +203,24 @@
             oninput="renderCart()">
         </span>
       </div>
+      <div class="line"><span>Ongkir POS</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <input id="shippingCost" type="number" value="0" min="0"
+            placeholder="Ongkir dari POS"
+            style="width:130px;margin:0;padding:4px 6px;font-size:12px;"
+            oninput="renderCart()">
+        </span>
+      </div>
       <div class="line grand"><span>Grand Total</span><span id="tGrand">Rp 0</span></div>
+    </div>
+
+    <label style="margin-top:12px;">Paste Detail Ongkir POS</label>
+    <textarea id="shippingText" rows="5" oninput="handleShippingTextInput()"
+      placeholder="Jne Yes&#10;Nama customer / penerima&#10;Alamat lengkap&#10;1 hari @18.000/Kg&#10;1 Kg x 18.000 = 18.000"></textarea>
+    <div class="toolbar">
+      <button class="btn btn-outline" style="width:160px;margin:0;" onclick="parseShippingPaste()">Ambil Ongkir POS</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="clearShippingInfo()">Bersihkan</button>
+      <div id="shippingStatus" class="grow" style="font-size:12px; min-height:14px; text-align:right;"></div>
     </div>
   </div>
 
@@ -426,6 +443,44 @@ function fmtRp(n){
   n = Math.round(n || 0);
   return "Rp\u00A0" + n.toLocaleString("id-ID");
 }
+function parseIdNumber(value){
+  const cleaned = String(value || "").replace(/[^\d]/g, "");
+  return Number(cleaned) || 0;
+}
+function getShippingCost(){
+  return Number(document.getElementById("shippingCost")?.value) || 0;
+}
+function getShippingText(){
+  return document.getElementById("shippingText")?.value.trim() || "";
+}
+function parseShippingInfo(rawText){
+  const lines = String(rawText || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const joined = lines.join("\n");
+  const calcLine = [...lines].reverse().find(line => /=\s*(?:Rp\s*)?[\d.]+/i.test(line)) || "";
+  const amountMatch = calcLine.match(/=\s*(?:Rp\s*)?([\d.]+)/i);
+  const weightMatch = joined.match(/([\d.,]+)\s*Kg\s*x\s*(?:Rp\s*)?([\d.]+)/i);
+  const rateMatch = joined.match(/(\d+\s*hari)\s*@\s*(?:Rp\s*)?([\d.]+)\s*\/\s*Kg/i);
+  const service = lines[0] || "";
+  return {
+    service,
+    lines,
+    amount: amountMatch ? parseIdNumber(amountMatch[1]) : 0,
+    weight: weightMatch ? weightMatch[1].replace(".", ",") : "",
+    rate: weightMatch ? parseIdNumber(weightMatch[2]) : (rateMatch ? parseIdNumber(rateMatch[2]) : 0),
+    eta: rateMatch ? rateMatch[1] : "",
+  };
+}
+function getShippingInfo(){
+  return parseShippingInfo(getShippingText());
+}
+function getShippingLabel(){
+  const info = getShippingInfo();
+  return info.weight ? `Shipping (${info.weight} Kg)` : "Shipping";
+}
+function getShippingBlockText(){
+  const info = getShippingInfo();
+  return info.lines.join("\n");
+}
 function todayStr(){
   const d = new Date();
   const p = (x)=>String(x).padStart(2,"0");
@@ -468,6 +523,9 @@ function clearCart(){
   cartItems = [];
   ["custName","custPhone","custEmail"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("discount").value = 0;
+  document.getElementById("shippingCost").value = 0;
+  document.getElementById("shippingText").value = "";
+  document.getElementById("shippingStatus").textContent = "";
   addItem();
   setStatus("Cart dan data customer dikosongkan.", "");
 }
@@ -506,7 +564,8 @@ function renderCart(skipRebuildInputs){
   }
   const sub = cartItems.reduce((s,i)=> s + (i.qty*i.price), 0);
   const disc = Number(document.getElementById("discount").value) || 0;
-  const grand = Math.max(0, sub - disc);
+  const shippingCost = getShippingCost();
+  const grand = Math.max(0, sub - disc + shippingCost);
   document.getElementById("tSub").textContent = fmtRp(sub);
   document.getElementById("tGrand").textContent = fmtRp(grand);
   saveDraft();
@@ -526,6 +585,8 @@ function collectDraft(){
       email: document.getElementById("custEmail").value,
     },
     discount: document.getElementById("discount").value,
+    shippingCost: document.getElementById("shippingCost").value,
+    shippingText: document.getElementById("shippingText").value,
     items: cartItems.map(({name, qty, price}) => ({name, qty, price})),
   };
 }
@@ -546,6 +607,8 @@ function loadDraft(){
     document.getElementById("custPhone").value = draft.customer?.phone || "";
     document.getElementById("custEmail").value = draft.customer?.email || "";
     document.getElementById("discount").value = draft.discount || 0;
+    document.getElementById("shippingCost").value = draft.shippingCost || 0;
+    document.getElementById("shippingText").value = draft.shippingText || "";
     cartItems = Array.isArray(draft.items)
       ? draft.items.map(it => ({ id: ++itemSeq, name: it.name || "", qty: Number(it.qty)||1, price: Number(it.price)||0 }))
       : [];
@@ -558,10 +621,52 @@ function loadDraft(){
   }
 }
 function bindAutosave(){
-  ["docNum","docDate","custName","custPhone","custEmail","discount"].forEach(id => {
+  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","shippingText"].forEach(id => {
     document.getElementById(id).addEventListener("input", saveDraft);
   });
   document.getElementById("docType").addEventListener("change", saveDraft);
+}
+
+function parseShippingPaste(){
+  const text = getShippingText();
+  const status = document.getElementById("shippingStatus");
+  if(!text){
+    status.textContent = "Paste detail ongkir POS dulu.";
+    status.className = "grow warn";
+    return;
+  }
+  const info = parseShippingInfo(text);
+  if(info.amount > 0){
+    document.getElementById("shippingCost").value = info.amount;
+    renderCart();
+    status.textContent = `Ongkir terbaca: ${fmtRp(info.amount)}`;
+    status.className = "grow ok";
+  }else{
+    status.textContent = "Nominal ongkir belum terbaca.";
+    status.className = "grow warn";
+    saveDraft();
+  }
+}
+function handleShippingTextInput(){
+  const text = getShippingText();
+  const info = parseShippingInfo(text);
+  const status = document.getElementById("shippingStatus");
+  if(info.amount > 0){
+    document.getElementById("shippingCost").value = info.amount;
+    status.textContent = `Ongkir terbaca: ${fmtRp(info.amount)}`;
+    status.className = "grow ok";
+    renderCart();
+  }else{
+    status.textContent = text ? "Menunggu nominal ongkir..." : "";
+    status.className = text ? "grow warn" : "grow";
+    saveDraft();
+  }
+}
+function clearShippingInfo(){
+  document.getElementById("shippingText").value = "";
+  document.getElementById("shippingCost").value = 0;
+  document.getElementById("shippingStatus").textContent = "";
+  renderCart();
 }
 
 /* ===============================================================
@@ -681,7 +786,7 @@ function renderHistoryList(){
   list.innerHTML = filtered.map(e => `
     <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}" data-history-id="${escapeHtml(e.id || "")}">
       <div class="list-title">${escapeHtml(historyLabel(e))}</div>
-      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)))}</div>
+      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)+(e.shipping_cost||0)))}</div>
     </div>
   `).join("");
 }
@@ -720,6 +825,8 @@ async function duplicateSelectedHistory(){
   document.getElementById("custPhone").value = entry.customer_phone || "";
   document.getElementById("custEmail").value = entry.customer_email || "";
   document.getElementById("discount").value = entry.discount || 0;
+  document.getElementById("shippingCost").value = entry.shipping_cost || 0;
+  document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
   await previewNumber();
@@ -737,6 +844,8 @@ function loadHistoryEntry(id){
   document.getElementById("custPhone").value = entry.customer_phone || "";
   document.getElementById("custEmail").value = entry.customer_email || "";
   document.getElementById("discount").value = entry.discount || 0;
+  document.getElementById("shippingCost").value = entry.shipping_cost || 0;
+  document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
   closeHistory();
@@ -912,13 +1021,47 @@ function validateBeforeGenerate(requireSupabase=true){
   if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
+function buildPdfFootRows(sub, discount, shippingCost, grand, colors){
+  const { FB, FN, FV, FR } = colors;
+  const shippingBlock = getShippingBlockText();
+  const totalRows = [
+    { label:"Sub-total", value:fmtRp(sub), style:"normal" },
+  ];
+  if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
+  if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
+  totalRows.push({ label:"TOTAL", value:fmtRp(grand), style:"grand" });
+
+  return totalRows.map((row, index) => {
+    const fillColor = row.style === "grand" ? FV : [255,255,255];
+    const textColor = row.style === "grand" ? 255 : (row.style === "discount" ? FR : FB);
+    const fontStyle = row.style === "grand" || row.style === "shipping" ? "bold" : (row.style === "discount" ? "italic" : "normal");
+    const cells = [];
+    if(index === 0){
+      cells.push({
+        content: shippingBlock,
+        rowSpan: totalRows.length,
+        colSpan: 3,
+        styles: {
+          halign:"right", valign:"middle", fontStyle:"normal",
+          fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01,
+          fontSize:8, cellPadding:{top:0.12,right:0.18,bottom:0.12,left:0.18},
+        },
+      });
+    }
+    cells.push(
+      { content: row.label, styles:{ halign:"right", fontStyle, fillColor, textColor, lineColor:FN, lineWidth:0.01 } },
+      { content: row.value, styles:{ halign:"right", fontStyle, fillColor, textColor, lineColor:FN, lineWidth:0.01 } },
+    );
+    return cells;
+  });
+}
 function setStatus(msg, cls){
   const el = document.getElementById("status");
   el.textContent = msg;
   el.className = cls || "";
 }
-async function saveHistory(num, docKey, customer, items, discount, dateStr){
-  const { error } = await sb.from("quotation_history").insert({
+async function saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr){
+  const payload = {
     id: num,
     owner_id: currentUser.id,
     doc_type: docKey,
@@ -927,8 +1070,19 @@ async function saveHistory(num, docKey, customer, items, discount, dateStr){
     customer_email: customer.email,
     items: items,
     discount: discount,
+    shipping_cost: shippingCost,
+    shipping_text: shippingText,
     doc_date: dateStr,
-  });
+  };
+  let { error } = await sb.from("quotation_history").insert(payload);
+  if(error && /shipping_cost/i.test(error.message || "")){
+    delete payload.shipping_cost;
+    ({ error } = await sb.from("quotation_history").insert(payload));
+  }
+  if(error && /shipping_text/i.test(error.message || "")){
+    delete payload.shipping_text;
+    ({ error } = await sb.from("quotation_history").insert(payload));
+  }
   if(error) throw new Error(`Gagal simpan history: ${error.message}`);
   historyEntries = [];
   customerEntries = [];
@@ -948,8 +1102,9 @@ async function previewPDF(){
   };
   const items = getValidCartItems();
   const discount = Number(document.getElementById("discount").value) || 0;
+  const shippingCost = getShippingCost();
   const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-  const grand = Math.max(0, sub - discount);
+  const grand = Math.max(0, sub - discount + shippingCost);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "cm", format: "a4" });
   const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
@@ -981,19 +1136,7 @@ async function previewPDF(){
   const openLines = doc.splitTextToSize(opening, CW);
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
   const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
-  const footRows = [
-    [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01}}, {content:fmtRp(sub), styles:{halign:"right", fontStyle:"bold", lineColor:FN, lineWidth:0.01}}],
-  ];
-  if(discount>0){
-    footRows.push([
-      {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
-      {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
-    ]);
-  }
-  footRows.push([
-    {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV, lineColor:FB, lineWidth:0.01}},
-    {content:fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:FV, lineColor:FB, lineWidth:0.01}},
-  ]);
+  const footRows = buildPdfFootRows(sub, discount, shippingCost, grand, { FB, FN, FV, FR });
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
     head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1057,8 +1200,10 @@ async function generatePDF(){
     };
     const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
+    const shippingCost = getShippingCost();
+    const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const grand = Math.max(0, sub - discount);
+    const grand = Math.max(0, sub - discount + shippingCost);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "cm", format: "a4" });
@@ -1108,20 +1253,7 @@ async function generatePDF(){
     const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
-    const footRows = [
-      [{content:"", colSpan:4, styles:{halign:"right", fontStyle:"bold", fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01}},
-       {content: fmtRp(sub), styles:{halign:"right", fontStyle:"bold", lineColor:FN, lineWidth:0.01}}],
-    ];
-    if(discount>0){
-      footRows.push([
-        {content:"", colSpan:4, styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
-        {content:"- "+fmtRp(discount), styles:{halign:"right", fontStyle:"italic", fillColor:[255,255,255], textColor:FR, lineColor:FN, lineWidth:0.01}},
-      ]);
-    }
-    footRows.push([
-      {content:"GRAND TOTAL", colSpan:4, styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46], lineColor:FB, lineWidth:0.01}},
-      {content: fmtRp(grand), styles:{halign:"right", fontStyle:"bold", textColor:255, fillColor:[26,122,46], lineColor:FB, lineWidth:0.01}},
-    ]);
+    const footRows = buildPdfFootRows(sub, discount, shippingCost, grand, { FB, FN, FV, FR });
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1189,7 +1321,7 @@ async function generatePDF(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     doc.save(`${filePrefix}_${safeName}_${num}.pdf`);
 
-    await saveHistory(num, docKey, customer, items, discount, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr);
     setStatus(`✅ PDF berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1224,8 +1356,10 @@ async function generateDOCX(){
     };
     const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
+    const shippingCost = getShippingCost();
+    const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const grand = Math.max(0, sub - discount);
+    const grand = Math.max(0, sub - discount + shippingCost);
 
     const cellText = (text, opts={}) => new TableCell({
       children:[ new Paragraph({ alignment: opts.align || AlignmentType.LEFT,
@@ -1259,6 +1393,9 @@ async function generateDOCX(){
       ...(discount>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("Diskon", { align:AlignmentType.RIGHT, color:"C0392B" }),
         cellText("- "+fmtRp(discount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
+      ...(shippingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+        cellText(getShippingLabel(), { bold:true, align:AlignmentType.RIGHT }),
+        cellText(fmtRp(shippingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
       new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("GRAND TOTAL", { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }),
         cellText(fmtRp(grand), { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }) ] }),
@@ -1298,6 +1435,11 @@ async function generateDOCX(){
       new Paragraph({ text:"" }),
       new Table({ width:{ size:100, type:WidthType.PERCENTAGE },
         rows: [ headerRow, ...itemRows, ...totalRows ] }),
+      ...(shippingText ? [
+        new Paragraph({ text:"" }),
+        new Paragraph({ children:[ new TextRun({ text:"Detail Ongkir POS", bold:true }) ] }),
+        ...shippingText.split(/\r?\n/).filter(Boolean).map(line => new Paragraph({ text: line })),
+      ] : []),
       new Paragraph({ text:"" }),
       new Paragraph({ text:"Pembayaran dapat ditransfer ke:" }),
       new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
@@ -1325,7 +1467,7 @@ async function generateDOCX(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     saveAs(blob, `${filePrefix}_${safeName}_${num}.docx`);
 
-    await saveHistory(num, docKey, customer, items, discount, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr);
     setStatus(`✅ DOCX berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
