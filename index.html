@@ -211,6 +211,14 @@
             oninput="renderCart()">
         </span>
       </div>
+      <div class="line"><span>Asuransi</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <input id="insuranceCost" type="number" value="0" min="0"
+            placeholder="Asuransi"
+            style="width:130px;margin:0;padding:4px 6px;font-size:12px;"
+            oninput="renderCart()">
+        </span>
+      </div>
       <div class="line grand"><span>Grand Total</span><span id="tGrand">Rp 0</span></div>
     </div>
 
@@ -450,6 +458,9 @@ function parseIdNumber(value){
 function getShippingCost(){
   return Number(document.getElementById("shippingCost")?.value) || 0;
 }
+function getInsuranceCost(){
+  return Number(document.getElementById("insuranceCost")?.value) || 0;
+}
 function getShippingText(){
   return document.getElementById("shippingText")?.value.trim() || "";
 }
@@ -524,6 +535,7 @@ function clearCart(){
   ["custName","custPhone","custEmail"].forEach(id => document.getElementById(id).value = "");
   document.getElementById("discount").value = 0;
   document.getElementById("shippingCost").value = 0;
+  document.getElementById("insuranceCost").value = 0;
   document.getElementById("shippingText").value = "";
   document.getElementById("shippingStatus").textContent = "";
   addItem();
@@ -565,7 +577,8 @@ function renderCart(skipRebuildInputs){
   const sub = cartItems.reduce((s,i)=> s + (i.qty*i.price), 0);
   const disc = Number(document.getElementById("discount").value) || 0;
   const shippingCost = getShippingCost();
-  const grand = Math.max(0, sub - disc + shippingCost);
+  const insuranceCost = getInsuranceCost();
+  const grand = Math.max(0, sub - disc + shippingCost + insuranceCost);
   document.getElementById("tSub").textContent = fmtRp(sub);
   document.getElementById("tGrand").textContent = fmtRp(grand);
   saveDraft();
@@ -586,6 +599,7 @@ function collectDraft(){
     },
     discount: document.getElementById("discount").value,
     shippingCost: document.getElementById("shippingCost").value,
+    insuranceCost: document.getElementById("insuranceCost").value,
     shippingText: document.getElementById("shippingText").value,
     items: cartItems.map(({name, qty, price}) => ({name, qty, price})),
   };
@@ -608,6 +622,7 @@ function loadDraft(){
     document.getElementById("custEmail").value = draft.customer?.email || "";
     document.getElementById("discount").value = draft.discount || 0;
     document.getElementById("shippingCost").value = draft.shippingCost || 0;
+    document.getElementById("insuranceCost").value = draft.insuranceCost || 0;
     document.getElementById("shippingText").value = draft.shippingText || "";
     cartItems = Array.isArray(draft.items)
       ? draft.items.map(it => ({ id: ++itemSeq, name: it.name || "", qty: Number(it.qty)||1, price: Number(it.price)||0 }))
@@ -621,7 +636,7 @@ function loadDraft(){
   }
 }
 function bindAutosave(){
-  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","shippingText"].forEach(id => {
+  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","insuranceCost","shippingText"].forEach(id => {
     document.getElementById(id).addEventListener("input", saveDraft);
   });
   document.getElementById("docType").addEventListener("change", saveDraft);
@@ -665,6 +680,7 @@ function handleShippingTextInput(){
 function clearShippingInfo(){
   document.getElementById("shippingText").value = "";
   document.getElementById("shippingCost").value = 0;
+  document.getElementById("insuranceCost").value = 0;
   document.getElementById("shippingStatus").textContent = "";
   renderCart();
 }
@@ -786,7 +802,7 @@ function renderHistoryList(){
   list.innerHTML = filtered.map(e => `
     <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}" data-history-id="${escapeHtml(e.id || "")}">
       <div class="list-title">${escapeHtml(historyLabel(e))}</div>
-      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)+(e.shipping_cost||0)))}</div>
+      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)+(e.shipping_cost||0)+(e.insurance_cost||0)))}</div>
     </div>
   `).join("");
 }
@@ -826,6 +842,7 @@ async function duplicateSelectedHistory(){
   document.getElementById("custEmail").value = entry.customer_email || "";
   document.getElementById("discount").value = entry.discount || 0;
   document.getElementById("shippingCost").value = entry.shipping_cost || 0;
+  document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
@@ -845,6 +862,7 @@ function loadHistoryEntry(id){
   document.getElementById("custEmail").value = entry.customer_email || "";
   document.getElementById("discount").value = entry.discount || 0;
   document.getElementById("shippingCost").value = entry.shipping_cost || 0;
+  document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
@@ -1021,7 +1039,7 @@ function validateBeforeGenerate(requireSupabase=true){
   if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
-function buildPdfFootRows(sub, discount, shippingCost, grand, colors){
+function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, colors){
   const { FB, FN, FV, FR } = colors;
   const shippingBlock = getShippingBlockText();
   const totalRows = [
@@ -1029,6 +1047,7 @@ function buildPdfFootRows(sub, discount, shippingCost, grand, colors){
   ];
   if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
   if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
+  if(insuranceCost>0) totalRows.push({ label:"Asuransi", value:fmtRp(insuranceCost), style:"shipping" });
   totalRows.push({ label:"TOTAL", value:fmtRp(grand), style:"grand" });
 
   return totalRows.map((row, index) => {
@@ -1055,12 +1074,44 @@ function buildPdfFootRows(sub, discount, shippingCost, grand, colors){
     return cells;
   });
 }
+function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPayment){
+  const { FB, FL, FN, FV, FR } = colors;
+  doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
+  doc.text("Pembayaran dapat ditransfer sesuai rincian berikut:", margin, y);
+  y += 0.42;
+  doc.autoTable({
+    startY: y, margin:{ left:margin, right:margin },
+    body: [
+      ["Barang / Produk", fmtRp(productPayment)],
+      ["Bank BCA", "693-0310-105  a/n  CV TEMAN BAIK"],
+      ["Bank Mandiri", "1200012717422  a/n  CV TEMAN BAIK"],
+    ],
+    theme:"grid",
+    styles:{ font:"times", fontSize:10, fillColor:FL, textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.21,right:0.35,bottom:0.21,left:0.35} },
+    columnStyles:{ 0:{ cellWidth:CW*0.25, fontStyle:"bold" }, 1:{ cellWidth:CW*0.75, fontStyle:"bold", textColor:FV } },
+  });
+  y = doc.lastAutoTable.finalY + 0.26;
+  if(nonPkpPayment > 0){
+    doc.autoTable({
+      startY: y, margin:{ left:margin, right:margin },
+      body: [
+        ["Ongkir + Asuransi (Non PKP)", fmtRp(nonPkpPayment)],
+        ["Bank BCA", "003 888 3111  a/n  Andrew"],
+      ],
+      theme:"grid",
+      styles:{ font:"times", fontSize:10, fillColor:[255,255,255], textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.21,right:0.35,bottom:0.21,left:0.35} },
+      columnStyles:{ 0:{ cellWidth:CW*0.35, fontStyle:"bold" }, 1:{ cellWidth:CW*0.65, fontStyle:"bold", textColor:FR } },
+    });
+    y = doc.lastAutoTable.finalY + 0.56;
+  }
+  return y;
+}
 function setStatus(msg, cls){
   const el = document.getElementById("status");
   el.textContent = msg;
   el.className = cls || "";
 }
-async function saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr){
+async function saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr){
   const payload = {
     id: num,
     owner_id: currentUser.id,
@@ -1071,12 +1122,17 @@ async function saveHistory(num, docKey, customer, items, discount, shippingCost,
     items: items,
     discount: discount,
     shipping_cost: shippingCost,
+    insurance_cost: insuranceCost,
     shipping_text: shippingText,
     doc_date: dateStr,
   };
   let { error } = await sb.from("quotation_history").insert(payload);
   if(error && /shipping_cost/i.test(error.message || "")){
     delete payload.shipping_cost;
+    ({ error } = await sb.from("quotation_history").insert(payload));
+  }
+  if(error && /insurance_cost/i.test(error.message || "")){
+    delete payload.insurance_cost;
     ({ error } = await sb.from("quotation_history").insert(payload));
   }
   if(error && /shipping_text/i.test(error.message || "")){
@@ -1103,8 +1159,11 @@ async function previewPDF(){
   const items = getValidCartItems();
   const discount = Number(document.getElementById("discount").value) || 0;
   const shippingCost = getShippingCost();
+  const insuranceCost = getInsuranceCost();
   const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-  const grand = Math.max(0, sub - discount + shippingCost);
+  const productPayment = Math.max(0, sub - discount);
+  const nonPkpPayment = shippingCost + insuranceCost;
+  const grand = productPayment + nonPkpPayment;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "cm", format: "a4" });
   const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
@@ -1136,7 +1195,7 @@ async function previewPDF(){
   const openLines = doc.splitTextToSize(opening, CW);
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
   const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
-  const footRows = buildPdfFootRows(sub, discount, shippingCost, grand, { FB, FN, FV, FR });
+  const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, { FB, FN, FV, FR });
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
     head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1149,14 +1208,7 @@ async function previewPDF(){
     showFoot:"lastPage",
   });
   y = doc.lastAutoTable.finalY + 0.64;
-  doc.setFont("times","normal"); doc.setFontSize(10); doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
-  doc.autoTable({
-    startY:y, margin:{left:margin,right:margin},
-    body:[["Bank BCA","693-0310-105  a/n  CV TEMAN BAIK"],["Bank Mandiri","1200012717422  a/n  CV TEMAN BAIK"]],
-    theme:"grid",
-    styles:{font:"times", fontSize:10, fillColor:FL, textColor:FB, lineColor:FN, lineWidth:0.01},
-    columnStyles:{0:{cellWidth:CW*0.25,fontStyle:"bold"},1:{cellWidth:CW*0.75,fontStyle:"bold",textColor:FV}},
-  });
+  y = addPaymentSection(doc, y, margin, CW, { FB, FL, FN, FV, FR }, productPayment, nonPkpPayment);
   doc.addPage();
   y = 1.5;
   doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH); y += kopH;
@@ -1201,9 +1253,12 @@ async function generatePDF(){
     const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
     const shippingCost = getShippingCost();
+    const insuranceCost = getInsuranceCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const grand = Math.max(0, sub - discount + shippingCost);
+    const productPayment = Math.max(0, sub - discount);
+    const nonPkpPayment = shippingCost + insuranceCost;
+    const grand = productPayment + nonPkpPayment;
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "cm", format: "a4" });
@@ -1253,7 +1308,7 @@ async function generatePDF(){
     const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
-    const footRows = buildPdfFootRows(sub, discount, shippingCost, grand, { FB, FN, FV, FR });
+    const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, { FB, FN, FV, FR });
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1274,19 +1329,7 @@ async function generatePDF(){
     });
     y = doc.lastAutoTable.finalY + 0.64;
 
-    doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
-    doc.text("Pembayaran dapat ditransfer ke:", margin, y); y += 0.42;
-    doc.autoTable({
-      startY: y, margin:{ left:margin, right:margin },
-      body: [
-        ["Bank BCA", "693-0310-105  a/n  CV TEMAN BAIK"],
-        ["Bank Mandiri", "1200012717422  a/n  CV TEMAN BAIK"],
-      ],
-      theme:"grid",
-      styles:{ font:"times", fontSize:10, fillColor:FL, textColor:FB, lineColor:FN, lineWidth:0.01, cellPadding:{top:0.21,right:0.35,bottom:0.21,left:0.35} },
-      columnStyles:{ 0:{ cellWidth:CW*0.25, fontStyle:"bold" }, 1:{ cellWidth:CW*0.75, fontStyle:"bold", textColor:FV } },
-    });
-    y = doc.lastAutoTable.finalY + 0.56;
+    y = addPaymentSection(doc, y, margin, CW, { FB, FL, FN, FV, FR }, productPayment, nonPkpPayment);
 
     doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
     doc.text("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.", margin, y, { maxWidth: CW }); y += 0.62;
@@ -1321,7 +1364,7 @@ async function generatePDF(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     doc.save(`${filePrefix}_${safeName}_${num}.pdf`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr);
     setStatus(`✅ PDF berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1357,9 +1400,12 @@ async function generateDOCX(){
     const items = getValidCartItems();
     const discount = Number(document.getElementById("discount").value) || 0;
     const shippingCost = getShippingCost();
+    const insuranceCost = getInsuranceCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const grand = Math.max(0, sub - discount + shippingCost);
+    const productPayment = Math.max(0, sub - discount);
+    const nonPkpPayment = shippingCost + insuranceCost;
+    const grand = productPayment + nonPkpPayment;
 
     const cellText = (text, opts={}) => new TableCell({
       children:[ new Paragraph({ alignment: opts.align || AlignmentType.LEFT,
@@ -1396,6 +1442,9 @@ async function generateDOCX(){
       ...(shippingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText(getShippingLabel(), { bold:true, align:AlignmentType.RIGHT }),
         cellText(fmtRp(shippingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
+      ...(insuranceCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+        cellText("Asuransi", { bold:true, align:AlignmentType.RIGHT }),
+        cellText(fmtRp(insuranceCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
       new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("GRAND TOTAL", { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }),
         cellText(fmtRp(grand), { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }) ] }),
@@ -1441,11 +1490,20 @@ async function generateDOCX(){
         ...shippingText.split(/\r?\n/).filter(Boolean).map(line => new Paragraph({ text: line })),
       ] : []),
       new Paragraph({ text:"" }),
-      new Paragraph({ text:"Pembayaran dapat ditransfer ke:" }),
+      new Paragraph({ text:"Pembayaran dapat ditransfer sesuai rincian berikut:" }),
+      new Paragraph({ children:[ new TextRun({ text:"Barang / Produk   ", bold:true }),
+        new TextRun({ text:fmtRp(productPayment), bold:true, color:"1a7a2e" }) ] }),
       new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
         new TextRun({ text:"693-0310-105  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
       new Paragraph({ children:[ new TextRun({ text:"Bank Mandiri   ", bold:true }),
         new TextRun({ text:"1200012717422  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
+      ...(nonPkpPayment > 0 ? [
+        new Paragraph({ text:"" }),
+        new Paragraph({ children:[ new TextRun({ text:"Ongkir + Asuransi (Non PKP)   ", bold:true }),
+          new TextRun({ text:fmtRp(nonPkpPayment), bold:true, color:"C0392B" }) ] }),
+        new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
+          new TextRun({ text:"003 888 3111  a/n  Andrew", bold:true, color:"C0392B" }) ] }),
+      ] : []),
       new Paragraph({ text:"" }),
       new Paragraph({ text:"Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation." }),
       new Paragraph({ text:"Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih." }),
@@ -1467,7 +1525,7 @@ async function generateDOCX(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     saveAs(blob, `${filePrefix}_${safeName}_${num}.docx`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr);
     setStatus(`✅ DOCX berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
