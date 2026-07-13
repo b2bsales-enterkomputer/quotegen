@@ -541,6 +541,13 @@ function getInsuranceCost(){
 function getPackingCost(){
   return Number(document.getElementById("packingCost")?.value) || 0;
 }
+function getNonPkpPaymentLabel(){
+  const parts = [];
+  if(getShippingCost() > 0) parts.push("Ongkir");
+  if(getInsuranceCost() > 0) parts.push("Asuransi");
+  if(getPackingCost() > 0) parts.push("Packing Kayu");
+  return parts.length ? `${parts.join(" + ")} (Non PKP)` : "Biaya Non PKP";
+}
 function getShippingText(){
   return document.getElementById("shippingText")?.value.trim() || "";
 }
@@ -1326,6 +1333,7 @@ function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCos
 }
 function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPayment){
   const { FB, FL, FN, FV, FR } = colors;
+  const nonPkpLabel = getNonPkpPaymentLabel();
   doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
   doc.text("Pembayaran dapat ditransfer sesuai rincian berikut:", margin, y);
   y += 0.42;
@@ -1345,7 +1353,7 @@ function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPay
     doc.autoTable({
       startY: y, margin:{ left:margin, right:margin },
       body: [
-        ["Ongkir + Asuransi + Packing Kayu (Non PKP)", fmtRp(nonPkpPayment)],
+        [nonPkpLabel, fmtRp(nonPkpPayment)],
         ["Bank BCA", "003 888 3111  a/n  Andrew"],
       ],
       theme:"grid",
@@ -1760,7 +1768,7 @@ async function generateDOCX(){
         new TextRun({ text:"1200012717422  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
       ...(nonPkpPayment > 0 ? [
         new Paragraph({ text:"" }),
-        new Paragraph({ children:[ new TextRun({ text:"Ongkir + Asuransi + Packing Kayu (Non PKP)   ", bold:true }),
+        new Paragraph({ children:[ new TextRun({ text:`${getNonPkpPaymentLabel()}   `, bold:true }),
           new TextRun({ text:fmtRp(nonPkpPayment), bold:true, color:"C0392B" }) ] }),
         new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
           new TextRun({ text:"003 888 3111  a/n  Andrew", bold:true, color:"C0392B" }) ] }),
