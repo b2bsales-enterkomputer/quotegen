@@ -131,6 +131,17 @@
     border-radius:4px; width:24px; height:24px; cursor:pointer; margin-right:3px;
   }
   .mini-btn:hover{ border-color:var(--green); color:var(--green); }
+  .modal-card.simulasi{ max-width:1050px; width:96%; height:88vh; }
+  .sim-layout{ display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,.85fr); gap:10px; min-height:0; flex:1; }
+  @media (max-width: 860px){ .sim-layout{ grid-template-columns:1fr; } }
+  .sim-panel{ border:1px solid var(--border); border-radius:8px; padding:10px; min-height:0; display:flex; flex-direction:column; }
+  .sim-list{ overflow:auto; flex:1; border:1px solid var(--border); border-radius:6px; background:var(--hdr); padding:5px; }
+  .sim-row{ display:grid; grid-template-columns:105px minmax(0,1fr) 118px; gap:8px; align-items:start; padding:7px; border-bottom:1px solid rgba(16,24,40,.06); }
+  .sim-row:nth-child(even){ background:#fff; }
+  .sim-row .label{ color:var(--green); font-weight:700; font-size:10px; }
+  .sim-row .name{ font-size:11px; line-height:1.35; }
+  .sim-row input{ margin:0; text-align:right; }
+  .sim-output{ flex:1; min-height:260px; }
 </style>
 </head>
 <body>
@@ -138,6 +149,7 @@
 <header>
   <h1><b>EK</b> AI Quotation Generator</h1>
   <div style="display:flex; align-items:center; gap:14px;">
+    <button class="btn btn-outline" style="width:auto; padding:7px 14px; margin:0;" onclick="openSimulasi()">Simulasi</button>
     <button class="btn btn-outline" style="width:auto; padding:7px 14px; margin:0;" onclick="openHistory()">📜 History</button>
     <span class="badge">Generator quotation sales</span>
   </div>
@@ -215,6 +227,14 @@
         <span style="display:flex;align-items:center;gap:6px;">
           <input id="insuranceCost" type="number" value="0" min="0"
             placeholder="Asuransi"
+            style="width:130px;margin:0;padding:4px 6px;font-size:12px;"
+            oninput="renderCart()">
+        </span>
+      </div>
+      <div class="line"><span>Packing Kayu</span>
+        <span style="display:flex;align-items:center;gap:6px;">
+          <input id="packingCost" type="number" value="0" min="0"
+            placeholder="Packing kayu"
             style="width:130px;margin:0;padding:4px 6px;font-size:12px;"
             oninput="renderCart()">
         </span>
@@ -319,6 +339,47 @@
   </div>
 </div>
 
+<!-- MODAL SIMULASI -->
+<div id="simulasiModal" class="modal">
+  <div class="modal-card simulasi">
+    <div class="modal-head">
+      <h2>FORMAT SIMULASI ENTERKOMPUTER</h2>
+      <button onclick="closeSimulasi()" class="icon-close">x</button>
+    </div>
+    <div class="toolbar">
+      <input id="simKode" placeholder="Kode simulasi, contoh: A2SD3VBC" style="width:210px;margin:0;text-transform:uppercase;">
+      <input id="simBaseUrl" placeholder="Base URL simulasi" style="width:300px;margin:0;">
+      <button class="btn btn-green" style="width:130px;margin:0;" onclick="loadSimulasi()">Load</button>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="openSimulasiUrl()">Buka URL</button>
+      <div id="simStatus" class="grow" style="font-size:12px; min-height:14px;"></div>
+    </div>
+    <details style="margin-bottom:10px;">
+      <summary style="cursor:pointer;font-size:12px;color:var(--tdim);">Fallback kalau Load diblok browser: paste HTML/JSON simulasi</summary>
+      <textarea id="simPasteRaw" rows="4" placeholder="Paste source halaman simulasi atau isi JSON context-json di sini"></textarea>
+      <button class="btn btn-outline" style="width:auto;margin:0;" onclick="loadSimulasiFromPaste()">Parse Paste</button>
+    </details>
+    <div class="sim-layout">
+      <div class="sim-panel">
+        <div class="toolbar">
+          <h2 class="grow" style="margin:0;">Komponen & Harga</h2>
+          <button class="btn btn-outline" style="width:auto;margin:0;" onclick="generateSimulasiText()">Generate Teks</button>
+        </div>
+        <div id="simList" class="sim-list">
+          <p style="color:var(--tdim);font-size:12px;padding:10px;">Load kode simulasi dulu.</p>
+        </div>
+      </div>
+      <div class="sim-panel">
+        <div class="toolbar">
+          <h2 class="grow" style="margin:0;">Hasil Siap Pakai</h2>
+          <button class="btn btn-outline" style="width:auto;margin:0;" onclick="copySimulasiText()">Copy</button>
+          <button class="btn btn-green" style="width:auto;margin:0;" onclick="addSimulasiToCart()">Tambah ke Cart</button>
+        </div>
+        <textarea id="simOutput" class="sim-output" readonly placeholder="Hasil simulasi akan muncul di sini."></textarea>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL PREVIEW -->
 <div id="previewModal" class="modal">
   <div class="modal-card preview">
@@ -337,6 +398,22 @@
 const DOC_TYPES = {
   "Penawaran Harga":  { judul: "Penawaran",       prefix: "EK-PH" },
   "Proforma Invoice": { judul: "Proforma Invoice", prefix: "EK-PI" },
+};
+const SIMULASI_DEFAULT_BASE_URL = "http://192.168.100.245/enterkomputer";
+const SIMULASI_LABEL_MAP = {
+  processor: "PROCESSOR",
+  motherboard: "MOTHERBOARD",
+  ram: "RAM",
+  vga: "VGA",
+  ssd: "SSD",
+  hdd: "HDD",
+  casing: "CASING",
+  psu: "PSU",
+  aircooler: "AIR COOLER",
+  watercooler: "WATER COOLER",
+  software: "SOFTWARE",
+  monitor: "MONITOR",
+  lcd: "MONITOR",
 };
 const SYARAT_ISI = [
   "Barang-barang yang ready diatas saat ini sangat terbatas / Limited.",
@@ -461,6 +538,9 @@ function getShippingCost(){
 function getInsuranceCost(){
   return Number(document.getElementById("insuranceCost")?.value) || 0;
 }
+function getPackingCost(){
+  return Number(document.getElementById("packingCost")?.value) || 0;
+}
 function getShippingText(){
   return document.getElementById("shippingText")?.value.trim() || "";
 }
@@ -536,6 +616,7 @@ function clearCart(){
   document.getElementById("discount").value = 0;
   document.getElementById("shippingCost").value = 0;
   document.getElementById("insuranceCost").value = 0;
+  document.getElementById("packingCost").value = 0;
   document.getElementById("shippingText").value = "";
   document.getElementById("shippingStatus").textContent = "";
   addItem();
@@ -578,7 +659,8 @@ function renderCart(skipRebuildInputs){
   const disc = Number(document.getElementById("discount").value) || 0;
   const shippingCost = getShippingCost();
   const insuranceCost = getInsuranceCost();
-  const grand = Math.max(0, sub - disc + shippingCost + insuranceCost);
+  const packingCost = getPackingCost();
+  const grand = Math.max(0, sub - disc + shippingCost + insuranceCost + packingCost);
   document.getElementById("tSub").textContent = fmtRp(sub);
   document.getElementById("tGrand").textContent = fmtRp(grand);
   saveDraft();
@@ -600,6 +682,7 @@ function collectDraft(){
     discount: document.getElementById("discount").value,
     shippingCost: document.getElementById("shippingCost").value,
     insuranceCost: document.getElementById("insuranceCost").value,
+    packingCost: document.getElementById("packingCost").value,
     shippingText: document.getElementById("shippingText").value,
     items: cartItems.map(({name, qty, price}) => ({name, qty, price})),
   };
@@ -623,6 +706,7 @@ function loadDraft(){
     document.getElementById("discount").value = draft.discount || 0;
     document.getElementById("shippingCost").value = draft.shippingCost || 0;
     document.getElementById("insuranceCost").value = draft.insuranceCost || 0;
+    document.getElementById("packingCost").value = draft.packingCost || 0;
     document.getElementById("shippingText").value = draft.shippingText || "";
     cartItems = Array.isArray(draft.items)
       ? draft.items.map(it => ({ id: ++itemSeq, name: it.name || "", qty: Number(it.qty)||1, price: Number(it.price)||0 }))
@@ -636,7 +720,7 @@ function loadDraft(){
   }
 }
 function bindAutosave(){
-  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","insuranceCost","shippingText"].forEach(id => {
+  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","insuranceCost","packingCost","shippingText"].forEach(id => {
     document.getElementById(id).addEventListener("input", saveDraft);
   });
   document.getElementById("docType").addEventListener("change", saveDraft);
@@ -681,6 +765,7 @@ function clearShippingInfo(){
   document.getElementById("shippingText").value = "";
   document.getElementById("shippingCost").value = 0;
   document.getElementById("insuranceCost").value = 0;
+  document.getElementById("packingCost").value = 0;
   document.getElementById("shippingStatus").textContent = "";
   renderCart();
 }
@@ -756,6 +841,168 @@ function clearPosPaste(){
 }
 
 /* ===============================================================
+   SIMULASI ENTERKOMPUTER
+=============================================================== */
+let simulasiKomponen = [];
+
+function openSimulasi(){
+  document.getElementById("simulasiModal").style.display = "flex";
+  document.getElementById("simBaseUrl").value =
+    localStorage.getItem("ek_sim_base_url") || SIMULASI_DEFAULT_BASE_URL;
+  setTimeout(() => document.getElementById("simKode").focus(), 0);
+}
+function closeSimulasi(){
+  document.getElementById("simulasiModal").style.display = "none";
+}
+function simulasiLabel(kname){
+  return SIMULASI_LABEL_MAP[String(kname || "").toLowerCase()] || String(kname || "").toUpperCase();
+}
+function simulasiFormatHarga(angka){
+  return "Rp" + (Number(angka) || 0).toLocaleString("id-ID");
+}
+function setSimStatus(msg, cls){
+  const el = document.getElementById("simStatus");
+  el.textContent = msg;
+  el.className = `grow ${cls || ""}`;
+}
+function getSimulasiUrl(){
+  const kode = document.getElementById("simKode").value.trim().toUpperCase();
+  const baseUrl = document.getElementById("simBaseUrl").value.trim().replace(/\/+$/, "");
+  if(!kode || !baseUrl) return "";
+  return `${baseUrl}/simulasi/preview/${encodeURIComponent(kode)}`;
+}
+function openSimulasiUrl(){
+  const url = getSimulasiUrl();
+  if(!url){ setSimStatus("Isi kode dan base URL dulu.", "warn"); return; }
+  window.open(url, "_blank", "noopener");
+}
+function parseSimulasiPayload(raw){
+  const text = String(raw || "").trim();
+  if(!text) throw new Error("Data paste kosong.");
+  let jsonText = text;
+  if(!text.startsWith("{")){
+    const doc = new DOMParser().parseFromString(text, "text/html");
+    const jsonDiv = doc.querySelector(".context-json");
+    if(!jsonDiv) throw new Error("context-json tidak ditemukan di HTML yang dipaste.");
+    jsonText = jsonDiv.textContent.trim();
+  }
+  const data = JSON.parse(jsonText);
+  const komponen = (data.product_data || []).map(item => ({
+    kname: String(item.KNAME || "").toLowerCase(),
+    nama: item.PNAME || "-",
+    harga: Number(item.PPRCZ) || 0,
+    qty: Number(item.RQTTY) || 1,
+  }));
+  if(!komponen.length) throw new Error("product_data kosong atau tidak ditemukan.");
+  return { komponen, grandTotal: data.grand_total || 0 };
+}
+function applySimulasiData(komponen, grandTotal){
+  simulasiKomponen = komponen;
+  renderSimulasiKomponen();
+  generateSimulasiText();
+  setSimStatus(`${simulasiKomponen.length} komponen | Grand Total: ${simulasiFormatHarga(grandTotal || hitungTotalSimulasi())}`, "ok");
+}
+async function loadSimulasi(){
+  const kode = document.getElementById("simKode").value.trim().toUpperCase();
+  const baseUrl = document.getElementById("simBaseUrl").value.trim().replace(/\/+$/, "");
+  if(!kode){ setSimStatus("Isi kode simulasi dulu.", "warn"); return; }
+  if(!baseUrl){ setSimStatus("Isi base URL simulasi dulu.", "warn"); return; }
+  localStorage.setItem("ek_sim_base_url", baseUrl);
+  setSimStatus("Mengambil data...", "");
+  document.getElementById("simList").innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:10px;">Memuat...</p>';
+
+  try{
+    const url = getSimulasiUrl();
+    const resp = await fetch(url, { cache:"no-store" });
+    if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const html = await resp.text();
+    const parsed = parseSimulasiPayload(html);
+    applySimulasiData(parsed.komponen, parsed.grandTotal);
+  }catch(e){
+    simulasiKomponen = [];
+    document.getElementById("simList").innerHTML = '<p style="color:var(--red);font-size:12px;padding:10px;">Gagal load simulasi.</p>';
+    setSimStatus(`Error: ${e.message}. Pakai Buka URL lalu paste HTML/JSON jika CORS.`, "err");
+  }
+}
+function loadSimulasiFromPaste(){
+  try{
+    const parsed = parseSimulasiPayload(document.getElementById("simPasteRaw").value);
+    applySimulasiData(parsed.komponen, parsed.grandTotal);
+  }catch(e){
+    setSimStatus(`Paste gagal: ${e.message}`, "err");
+  }
+}
+function renderSimulasiKomponen(){
+  const list = document.getElementById("simList");
+  if(!simulasiKomponen.length){
+    list.innerHTML = '<p style="color:var(--tdim);font-size:12px;padding:10px;">Belum ada komponen.</p>';
+    return;
+  }
+  list.innerHTML = simulasiKomponen.map((k, i) => `
+    <div class="sim-row">
+      <div class="label">${escapeHtml(simulasiLabel(k.kname))}</div>
+      <div class="name">${escapeHtml(k.nama)}<br><span style="color:var(--tdim);">Qty: ${Number(k.qty)||1}</span></div>
+      <input type="number" min="0" value="${Number(k.harga)||0}" oninput="updateSimulasiHarga(${i}, this.value)">
+    </div>
+  `).join("");
+}
+function updateSimulasiHarga(index, value){
+  if(!simulasiKomponen[index]) return;
+  simulasiKomponen[index].harga = Number(value) || 0;
+  generateSimulasiText();
+}
+function hitungTotalSimulasi(){
+  return simulasiKomponen.reduce((sum, k) => sum + ((Number(k.harga)||0) * (Number(k.qty)||1)), 0);
+}
+function generateSimulasiText(){
+  const kode = document.getElementById("simKode").value.trim().toUpperCase();
+  if(!simulasiKomponen.length){
+    setSimStatus("Load simulasi dulu.", "warn");
+    return;
+  }
+  const lines = [`Simulasi Rakit PC - #${kode}`, ""];
+  simulasiKomponen.forEach(k => {
+    const harga = Number(k.harga) || 0;
+    const qty = Number(k.qty) || 1;
+    lines.push(simulasiLabel(k.kname));
+    lines.push(`${k.nama} Qty: ${qty} - ${simulasiFormatHarga(harga)}`);
+    lines.push("");
+  });
+  lines.push(`Grand Total: ${simulasiFormatHarga(hitungTotalSimulasi())}`);
+  document.getElementById("simOutput").value = lines.join("\n");
+  setSimStatus(`${simulasiKomponen.length} komponen | Grand Total: ${simulasiFormatHarga(hitungTotalSimulasi())}`, "ok");
+}
+async function copySimulasiText(){
+  const text = document.getElementById("simOutput").value.trim();
+  if(!text){ setSimStatus("Belum ada teks untuk dicopy.", "warn"); return; }
+  try{
+    await navigator.clipboard.writeText(text);
+    setSimStatus("Teks simulasi dicopy.", "ok");
+  }catch(e){
+    document.getElementById("simOutput").select();
+    setSimStatus("Clipboard diblok browser, teks sudah diseleksi.", "warn");
+  }
+}
+function addSimulasiToCart(){
+  if(!simulasiKomponen.length){
+    setSimStatus("Load simulasi dulu.", "warn");
+    return;
+  }
+  cartItems = cartItems.filter(it => (it.name || "").trim() !== "");
+  simulasiKomponen.forEach(k => {
+    itemSeq++;
+    cartItems.push({
+      id: itemSeq,
+      name: k.nama || "-",
+      qty: Number(k.qty) || 1,
+      price: Number(k.harga) || 0,
+    });
+  });
+  renderCart();
+  setSimStatus(`${simulasiKomponen.length} komponen ditambahkan ke cart.`, "ok");
+}
+
+/* ===============================================================
    HISTORY QUOTATION
 =============================================================== */
 let historyEntries = [];
@@ -802,7 +1049,7 @@ function renderHistoryList(){
   list.innerHTML = filtered.map(e => `
     <div class="list-row ${e.id === selectedHistoryId ? "selected" : ""}" data-history-id="${escapeHtml(e.id || "")}">
       <div class="list-title">${escapeHtml(historyLabel(e))}</div>
-      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)+(e.shipping_cost||0)+(e.insurance_cost||0)))}</div>
+      <div class="list-detail">${escapeHtml(e.doc_type || "")} | Total ${fmtRp(Math.max(0,(e.items||[]).reduce((s,i)=>s+i.qty*i.price,0)-(e.discount||0)+(e.shipping_cost||0)+(e.insurance_cost||0)+(e.packing_cost||0)))}</div>
     </div>
   `).join("");
 }
@@ -843,6 +1090,7 @@ async function duplicateSelectedHistory(){
   document.getElementById("discount").value = entry.discount || 0;
   document.getElementById("shippingCost").value = entry.shipping_cost || 0;
   document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
+  document.getElementById("packingCost").value = entry.packing_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
@@ -863,6 +1111,7 @@ function loadHistoryEntry(id){
   document.getElementById("discount").value = entry.discount || 0;
   document.getElementById("shippingCost").value = entry.shipping_cost || 0;
   document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
+  document.getElementById("packingCost").value = entry.packing_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
@@ -1039,7 +1288,7 @@ function validateBeforeGenerate(requireSupabase=true){
   if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
-function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, colors){
+function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, colors){
   const { FB, FN, FV, FR } = colors;
   const shippingBlock = getShippingBlockText();
   const totalRows = [
@@ -1048,6 +1297,7 @@ function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, col
   if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
   if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
   if(insuranceCost>0) totalRows.push({ label:"Asuransi", value:fmtRp(insuranceCost), style:"shipping" });
+  if(packingCost>0) totalRows.push({ label:"Packing Kayu", value:fmtRp(packingCost), style:"shipping" });
   totalRows.push({ label:"TOTAL", value:fmtRp(grand), style:"grand" });
 
   return totalRows.map((row, index) => {
@@ -1095,7 +1345,7 @@ function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPay
     doc.autoTable({
       startY: y, margin:{ left:margin, right:margin },
       body: [
-        ["Ongkir + Asuransi (Non PKP)", fmtRp(nonPkpPayment)],
+        ["Ongkir + Asuransi + Packing Kayu (Non PKP)", fmtRp(nonPkpPayment)],
         ["Bank BCA", "003 888 3111  a/n  Andrew"],
       ],
       theme:"grid",
@@ -1111,7 +1361,7 @@ function setStatus(msg, cls){
   el.textContent = msg;
   el.className = cls || "";
 }
-async function saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr){
+async function saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr){
   const payload = {
     id: num,
     owner_id: currentUser.id,
@@ -1123,6 +1373,7 @@ async function saveHistory(num, docKey, customer, items, discount, shippingCost,
     discount: discount,
     shipping_cost: shippingCost,
     insurance_cost: insuranceCost,
+    packing_cost: packingCost,
     shipping_text: shippingText,
     doc_date: dateStr,
   };
@@ -1133,6 +1384,10 @@ async function saveHistory(num, docKey, customer, items, discount, shippingCost,
   }
   if(error && /insurance_cost/i.test(error.message || "")){
     delete payload.insurance_cost;
+    ({ error } = await sb.from("quotation_history").insert(payload));
+  }
+  if(error && /packing_cost/i.test(error.message || "")){
+    delete payload.packing_cost;
     ({ error } = await sb.from("quotation_history").insert(payload));
   }
   if(error && /shipping_text/i.test(error.message || "")){
@@ -1160,9 +1415,10 @@ async function previewPDF(){
   const discount = Number(document.getElementById("discount").value) || 0;
   const shippingCost = getShippingCost();
   const insuranceCost = getInsuranceCost();
+  const packingCost = getPackingCost();
   const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
   const productPayment = Math.max(0, sub - discount);
-  const nonPkpPayment = shippingCost + insuranceCost;
+  const nonPkpPayment = shippingCost + insuranceCost + packingCost;
   const grand = productPayment + nonPkpPayment;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "cm", format: "a4" });
@@ -1195,7 +1451,7 @@ async function previewPDF(){
   const openLines = doc.splitTextToSize(opening, CW);
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
   const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
-  const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, { FB, FN, FV, FR });
+  const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
     head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1254,10 +1510,11 @@ async function generatePDF(){
     const discount = Number(document.getElementById("discount").value) || 0;
     const shippingCost = getShippingCost();
     const insuranceCost = getInsuranceCost();
+    const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
     const productPayment = Math.max(0, sub - discount);
-    const nonPkpPayment = shippingCost + insuranceCost;
+    const nonPkpPayment = shippingCost + insuranceCost + packingCost;
     const grand = productPayment + nonPkpPayment;
 
     const { jsPDF } = window.jspdf;
@@ -1308,7 +1565,7 @@ async function generatePDF(){
     const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
-    const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, grand, { FB, FN, FV, FR });
+    const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1364,7 +1621,7 @@ async function generatePDF(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     doc.save(`${filePrefix}_${safeName}_${num}.pdf`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr);
     setStatus(`✅ PDF berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1401,10 +1658,11 @@ async function generateDOCX(){
     const discount = Number(document.getElementById("discount").value) || 0;
     const shippingCost = getShippingCost();
     const insuranceCost = getInsuranceCost();
+    const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
     const productPayment = Math.max(0, sub - discount);
-    const nonPkpPayment = shippingCost + insuranceCost;
+    const nonPkpPayment = shippingCost + insuranceCost + packingCost;
     const grand = productPayment + nonPkpPayment;
 
     const cellText = (text, opts={}) => new TableCell({
@@ -1445,6 +1703,9 @@ async function generateDOCX(){
       ...(insuranceCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("Asuransi", { bold:true, align:AlignmentType.RIGHT }),
         cellText(fmtRp(insuranceCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
+      ...(packingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+        cellText("Packing Kayu", { bold:true, align:AlignmentType.RIGHT }),
+        cellText(fmtRp(packingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
       new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("GRAND TOTAL", { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }),
         cellText(fmtRp(grand), { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }) ] }),
@@ -1499,7 +1760,7 @@ async function generateDOCX(){
         new TextRun({ text:"1200012717422  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
       ...(nonPkpPayment > 0 ? [
         new Paragraph({ text:"" }),
-        new Paragraph({ children:[ new TextRun({ text:"Ongkir + Asuransi (Non PKP)   ", bold:true }),
+        new Paragraph({ children:[ new TextRun({ text:"Ongkir + Asuransi + Packing Kayu (Non PKP)   ", bold:true }),
           new TextRun({ text:fmtRp(nonPkpPayment), bold:true, color:"C0392B" }) ] }),
         new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
           new TextRun({ text:"003 888 3111  a/n  Andrew", bold:true, color:"C0392B" }) ] }),
@@ -1525,7 +1786,7 @@ async function generateDOCX(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     saveAs(blob, `${filePrefix}_${safeName}_${num}.docx`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr);
     setStatus(`✅ DOCX berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1545,6 +1806,11 @@ window.onload = () => {
   loadConfig();
   initHistoryListEvents();
   initCustomerListEvents();
+  ["simKode","simBaseUrl"].forEach(id => {
+    document.getElementById(id).addEventListener("keydown", e => {
+      if(e.key === "Enter") loadSimulasi();
+    });
+  });
   if(!loadDraft()) addItem(); // 1 baris kosong biar langsung bisa isi
 };
 </script>
