@@ -257,7 +257,7 @@
     <h2>Info Dokumen</h2>
 
     <label>Jenis Dokumen</label>
-    <select id="docType" onchange="previewNumber()">
+    <select id="docType" onchange="onDocTypeChange()">
       <option value="Penawaran Harga">Penawaran Harga (EK-PH)</option>
       <option value="Proforma Invoice">Proforma Invoice (EK-PI)</option>
     </select>
@@ -276,6 +276,11 @@
         <label>Tanggal</label>
         <input id="docDate" type="text" placeholder="dd-mm-yyyy">
       </div>
+    </div>
+
+    <div id="poRefField" style="display:none;">
+      <label>Referensi PO (opsional, khusus Proforma Invoice)</label>
+      <input id="poReference" placeholder="PO/2026/09/00123">
     </div>
 
     <label>Nama Customer / Perusahaan</label>
@@ -551,6 +556,20 @@ function getNonPkpPaymentLabel(){
 function getShippingText(){
   return document.getElementById("shippingText")?.value.trim() || "";
 }
+function getPoReference(){
+  return document.getElementById("poReference")?.value.trim() || "";
+}
+function togglePoRefField(){
+  const isProforma = document.getElementById("docType").value === "Proforma Invoice";
+  const field = document.getElementById("poRefField");
+  field.style.display = isProforma ? "block" : "none";
+  if(!isProforma) document.getElementById("poReference").value = "";
+}
+function onDocTypeChange(){
+  togglePoRefField();
+  previewNumber();
+  saveDraft();
+}
 function parseShippingInfo(rawText){
   const lines = String(rawText || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const joined = lines.join("\n");
@@ -681,6 +700,7 @@ function collectDraft(){
     docType: document.getElementById("docType").value,
     docNum: document.getElementById("docNum").value,
     docDate: document.getElementById("docDate").value,
+    poReference: document.getElementById("poReference").value,
     customer: {
       name: document.getElementById("custName").value,
       phone: document.getElementById("custPhone").value,
@@ -707,6 +727,8 @@ function loadDraft(){
     if(draft.docType) document.getElementById("docType").value = draft.docType;
     if(draft.docNum) document.getElementById("docNum").value = draft.docNum;
     if(draft.docDate) document.getElementById("docDate").value = draft.docDate;
+    document.getElementById("poReference").value = draft.poReference || "";
+    togglePoRefField();
     document.getElementById("custName").value = draft.customer?.name || "";
     document.getElementById("custPhone").value = draft.customer?.phone || "";
     document.getElementById("custEmail").value = draft.customer?.email || "";
@@ -727,7 +749,7 @@ function loadDraft(){
   }
 }
 function bindAutosave(){
-  ["docNum","docDate","custName","custPhone","custEmail","discount","shippingCost","insuranceCost","packingCost","shippingText"].forEach(id => {
+  ["docNum","docDate","poReference","custName","custPhone","custEmail","discount","shippingCost","insuranceCost","packingCost","shippingText"].forEach(id => {
     document.getElementById(id).addEventListener("input", saveDraft);
   });
   document.getElementById("docType").addEventListener("change", saveDraft);
@@ -1099,6 +1121,8 @@ async function duplicateSelectedHistory(){
   document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
   document.getElementById("packingCost").value = entry.packing_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
+  document.getElementById("poReference").value = entry.po_reference || "";
+  togglePoRefField();
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
   await previewNumber();
@@ -1120,6 +1144,8 @@ function loadHistoryEntry(id){
   document.getElementById("insuranceCost").value = entry.insurance_cost || 0;
   document.getElementById("packingCost").value = entry.packing_cost || 0;
   document.getElementById("shippingText").value = entry.shipping_text || "";
+  document.getElementById("poReference").value = entry.po_reference || "";
+  togglePoRefField();
   cartItems = (entry.items || []).map(it => ({ id: ++itemSeq, name: it.name, qty: it.qty, price: it.price }));
   renderCart();
   closeHistory();
@@ -1364,12 +1390,21 @@ function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPay
   }
   return y;
 }
+function addPoReferenceLine(doc, y, margin, FG){
+  const poRef = getPoReference();
+  if(!poRef) return y;
+  doc.setFont("times","italic"); doc.setFontSize(10); doc.setTextColor(...FG);
+  doc.text("Referensi PO :", margin, y);
+  doc.setFont("times","bold");
+  doc.text(poRef, margin + 2.4, y);
+  return y + 0.42;
+}
 function setStatus(msg, cls){
   const el = document.getElementById("status");
   el.textContent = msg;
   el.className = cls || "";
 }
-async function saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr){
+async function saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr, poReference){
   const payload = {
     id: num,
     owner_id: currentUser.id,
@@ -1383,9 +1418,14 @@ async function saveHistory(num, docKey, customer, items, discount, shippingCost,
     insurance_cost: insuranceCost,
     packing_cost: packingCost,
     shipping_text: shippingText,
+    po_reference: poReference || null,
     doc_date: dateStr,
   };
   let { error } = await sb.from("quotation_history").insert(payload);
+  if(error && /po_reference/i.test(error.message || "")){
+    delete payload.po_reference;
+    ({ error } = await sb.from("quotation_history").insert(payload));
+  }
   if(error && /shipping_cost/i.test(error.message || "")){
     delete payload.shipping_cost;
     ({ error } = await sb.from("quotation_history").insert(payload));
@@ -1442,7 +1482,9 @@ async function previewPDF(){
   doc.text("No. : ", margin, y);
   doc.setFont("times","bold"); doc.text(num, margin+1.05, y);
   doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
-  y += 0.25; doc.setDrawColor(...FN); doc.line(margin, y, W-margin, y); y += 0.75;
+  y += 0.25;
+  y = addPoReferenceLine(doc, y, margin, FG);
+  doc.setDrawColor(...FN); doc.line(margin, y, W-margin, y); y += 0.75;
   doc.setFont("times","bold"); doc.setFontSize(13); doc.text(judul.toUpperCase(), W/2, y, { align:"center" });
   y += 0.22; doc.setDrawColor(...FV); doc.line(W/2 - (CW*0.4)/2, y, W/2 + (CW*0.4)/2, y); y += 0.7;
   doc.setFont("times","normal"); doc.setFontSize(10);
@@ -1544,6 +1586,7 @@ async function generatePDF(){
     doc.setFont("times","bold"); doc.text(num, margin + 1.05, y);
     doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
     y += 0.25;
+    y = addPoReferenceLine(doc, y, margin, FG);
     doc.setDrawColor(...FN); doc.setLineWidth(0.02);
     doc.line(margin, y, W-margin, y);
     y += 0.75;
@@ -1629,7 +1672,7 @@ async function generatePDF(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     doc.save(`${filePrefix}_${safeName}_${num}.pdf`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr, getPoReference());
     setStatus(`✅ PDF berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1743,6 +1786,10 @@ async function generateDOCX(){
         new TextRun({ text:`No. : ${num}`, bold:true }),
         new TextRun({ text:`\t\t\t\t\tJakarta, ${dateStr}` }),
       ]}),
+      ...(getPoReference() ? [ new Paragraph({ children:[
+        new TextRun({ text:"Referensi PO : ", italics:true, color:"555555" }),
+        new TextRun({ text:getPoReference(), bold:true, color:"555555" }),
+      ]}) ] : []),
       new Paragraph({ text:"" }),
       new Paragraph({ alignment: AlignmentType.CENTER,
         children:[ new TextRun({ text: judul.toUpperCase(), bold:true, size:26 }) ] }),
@@ -1794,7 +1841,7 @@ async function generateDOCX(){
     const filePrefix = docKey === "Proforma Invoice" ? "ProformaInvoice" : "Penawaran";
     saveAs(blob, `${filePrefix}_${safeName}_${num}.docx`);
 
-    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr);
+    await saveHistory(num, docKey, customer, items, discount, shippingCost, insuranceCost, packingCost, shippingText, dateStr, getPoReference());
     setStatus(`✅ DOCX berhasil: ${num}`, "ok");
     await previewNumber();
   }catch(e){
@@ -1812,6 +1859,7 @@ window.onload = () => {
   document.getElementById("docDate").value = todayStr();
   bindAutosave();
   loadConfig();
+  togglePoRefField();
   initHistoryListEvents();
   initCustomerListEvents();
   ["simKode","simBaseUrl"].forEach(id => {
