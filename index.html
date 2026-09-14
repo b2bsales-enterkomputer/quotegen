@@ -1392,12 +1392,13 @@ function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPay
 }
 function addPoReferenceLine(doc, y, margin, FG){
   const poRef = getPoReference();
-  if(!poRef) return y;
+  if(!poRef) return y + 0.25; // gap sebelum garis pemisah kalau PO ref kosong (sama seperti layout asli)
+  y += 0.42; // jarak dari baris "No." turun ke baris Referensi PO
   doc.setFont("times","italic"); doc.setFontSize(10); doc.setTextColor(...FG);
   doc.text("Referensi PO :", margin, y);
   doc.setFont("times","bold");
-  doc.text(poRef, margin + 2.4, y);
-  return y + 0.42;
+  doc.text(poRef, margin + 2.6, y);
+  return y + 0.32; // jarak dari baris Referensi PO turun ke garis pemisah
 }
 function setStatus(msg, cls){
   const el = document.getElementById("status");
@@ -1482,7 +1483,6 @@ async function previewPDF(){
   doc.text("No. : ", margin, y);
   doc.setFont("times","bold"); doc.text(num, margin+1.05, y);
   doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
-  y += 0.25;
   y = addPoReferenceLine(doc, y, margin, FG);
   doc.setDrawColor(...FN); doc.line(margin, y, W-margin, y); y += 0.75;
   doc.setFont("times","bold"); doc.setFontSize(13); doc.text(judul.toUpperCase(), W/2, y, { align:"center" });
@@ -1585,7 +1585,6 @@ async function generatePDF(){
     doc.text(`No. : `, margin, y);
     doc.setFont("times","bold"); doc.text(num, margin + 1.05, y);
     doc.setFont("times","normal"); doc.text(`Jakarta, ${dateStr}`, W-margin, y, { align:"right" });
-    y += 0.25;
     y = addPoReferenceLine(doc, y, margin, FG);
     doc.setDrawColor(...FN); doc.setLineWidth(0.02);
     doc.line(margin, y, W-margin, y);
