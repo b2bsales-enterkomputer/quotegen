@@ -1332,7 +1332,8 @@ function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, ins
   ];
   if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
   if(includePpn){
-    totalRows.push({ label:"DPP", value:fmtRp(dpp), style:"normal" });
+    const hargaJualNetto = Math.max(0, sub - discount);
+    totalRows.push({ label:"Harga Jual (Netto)", value:fmtRp(hargaJualNetto), style:"normal" });
     totalRows.push({ label:"PPN 11%", value:fmtRp(ppn), style:"normal" });
   }
   if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
@@ -1364,7 +1365,7 @@ function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, ins
     return cells;
   });
 }
-const PPN_DISCLAIMER = "* Perhitungan PPN memakai skema DPP Nilai Lain (11/12 x Harga Jual) sesuai PMK 131/2024 - tarif nominal 12% efektif 11%. Nilai final berpotensi berbeda beberapa rupiah dari Faktur Pajak resmi di Coretax karena pembulatan saat input manual.";
+const PPN_DISCLAIMER = "* PPN dihitung dari Harga Jual (Netto) x 11% (secara teknis via DPP Nilai Lain 11/12 x Harga Jual, tarif nominal 12%, sesuai PMK 131/2024). Nilai final berpotensi berbeda beberapa rupiah dari Faktur Pajak resmi di Coretax karena pembulatan saat input manual.";
 function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPayment){
   const { FB, FL, FN, FV, FR } = colors;
   const nonPkpLabel = getNonPkpPaymentLabel();
@@ -1799,10 +1800,10 @@ async function generateDOCX(){
         cellText("- "+fmtRp(discount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
       ...(includePpn ? [
         new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-          cellText("DPP Nilai Lain (11/12)", { align:AlignmentType.RIGHT }),
-          cellText(fmtRp(dpp), { align:AlignmentType.RIGHT }) ] }),
+          cellText("Harga Jual (Netto)", { align:AlignmentType.RIGHT }),
+          cellText(fmtRp(Math.max(0, sub - discount)), { align:AlignmentType.RIGHT }) ] }),
         new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-          cellText("PPN 12% (efektif 11%)", { align:AlignmentType.RIGHT }),
+          cellText("PPN 11%", { align:AlignmentType.RIGHT }),
           cellText(fmtRp(ppn), { align:AlignmentType.RIGHT }) ] }),
       ] : []),
       ...(shippingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
