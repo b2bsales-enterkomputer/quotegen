@@ -1332,8 +1332,8 @@ function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, ins
   ];
   if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
   if(includePpn){
-    totalRows.push({ label:"DPP Nilai Lain (11/12)", value:fmtRp(dpp), style:"normal" });
-    totalRows.push({ label:"PPN 12% (efektif 11%)", value:fmtRp(ppn), style:"normal" });
+    totalRows.push({ label:"DPP", value:fmtRp(dpp), style:"normal" });
+    totalRows.push({ label:"PPN 11%", value:fmtRp(ppn), style:"normal" });
   }
   if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
   if(insuranceCost>0) totalRows.push({ label:"Asuransi", value:fmtRp(insuranceCost), style:"shipping" });
