@@ -1324,7 +1324,7 @@ function validateBeforeGenerate(requireSupabase=true){
   if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
-function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, colors){
+function buildPdfFootRows(sub, discount, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, colors){
   const { FB, FN, FV, FR } = colors;
   const shippingBlock = getShippingBlockText();
   const totalRows = [
@@ -1365,7 +1365,7 @@ function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, ins
     return cells;
   });
 }
-const PPN_DISCLAIMER = "* PPN dihitung dari Harga Jual (Netto) x 11% (secara teknis via DPP Nilai Lain 11/12 x Harga Jual, tarif nominal 12%, sesuai PMK 131/2024). Nilai final berpotensi berbeda beberapa rupiah dari Faktur Pajak resmi di Coretax karena pembulatan saat input manual.";
+const PPN_DISCLAIMER = "* Harga pada dokumen ini adalah harga jual yang sudah termasuk PPN, lalu dipecah menjadi Harga Jual (Netto) + PPN 11% (dibagi 1,11 per baris, dibulatkan ke rupiah) - Grand Total tetap sama dengan versi Invoice Normal. Perhitungan mengikuti skema DPP Nilai Lain sesuai PMK 131/2024. Nilai final berpotensi berbeda beberapa rupiah dari Faktur Pajak resmi di Coretax karena pembulatan saat input manual.";
 function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPayment){
   const { FB, FL, FN, FV, FR } = colors;
   const nonPkpLabel = getNonPkpPaymentLabel();
@@ -1421,25 +1421,51 @@ function addPoReferenceLine(doc, y, margin, FG){
    beberapa rupiah dengan Faktur Pajak resmi tetap mungkin terjadi
    tergantung cara staf pajak membulatkan saat input manual.
 =============================================================== */
-function computePpnBreakdown(hargaJual){
-  const dpp = Math.round(hargaJual * 11 / 12);
+function computePpnBreakdown(hargaJualNetto){
+  // hargaJualNetto di sini SUDAH netto (hasil konversi gross/1.11), jadi PPN = 11% langsung.
+  // Tetap dihitung via skema resmi (DPP Nilai Lain 11/12, lalu x12%) - hasil akhirnya identik
+  // dengan 11% langsung, tapi mengikuti pembulatan yang sama seperti perhitungan resmi Coretax.
+  const dpp = Math.round(hargaJualNetto * 11 / 12);
   const ppn = Math.round(dpp * 0.12);
-  return { dpp, ppn, total: hargaJual + ppn };
+  return { dpp, ppn, total: hargaJualNetto + ppn };
 }
 function getPdfTemplate(){
   return document.getElementById("pdfTemplate")?.value || "normal";
 }
-function computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost){
-  const hargaJual = Math.max(0, sub - discount);
+const GROSS_TO_NETTO_DIVISOR = 1.11; // harga di cart = gross (sudah termasuk PPN 11%)
+function toNettoFromGross(grossAmount){
+  return Math.round(grossAmount / GROSS_TO_NETTO_DIVISOR);
+}
+function getItemDisplayAmounts(item, includePpn){
+  // Konversi per-baris (bukan per-unit dikali qty) - persis cara invoice POS asli menampilkan,
+  // sehingga unit price & line total dibulatkan independen (bisa selisih 1 rupiah, itu normal).
+  if(!includePpn) return { unit: item.price, lineTotal: item.qty * item.price };
+  return {
+    unit: toNettoFromGross(item.price),
+    lineTotal: toNettoFromGross(item.qty * item.price),
+  };
+}
+function computeInvoiceTotals(items, discount, shippingCost, insuranceCost, packingCost){
+  const subGross = items.reduce((s,i)=> s + (i.qty*i.price), 0);
   const includePpn = getPdfTemplate() === "ppn11";
-  let dpp = 0, ppn = 0, productPayment = hargaJual;
+  let displaySub, displayDiscount, dpp = 0, ppn = 0, productPayment;
   if(includePpn){
-    const breakdown = computePpnBreakdown(hargaJual);
+    // Harga di cart adalah GROSS (sudah termasuk PPN). Invoice PPN 11% memecahnya jadi
+    // Netto + PPN dengan cara membagi 1.11 (per baris), BUKAN menambah pajak baru di atas
+    // harga yang sudah dientry - grand total akhirnya harus sama dgn Invoice Normal.
+    displaySub = items.reduce((s,i)=> s + toNettoFromGross(i.qty*i.price), 0);
+    displayDiscount = toNettoFromGross(discount);
+    const hargaJualNetto = Math.max(0, displaySub - displayDiscount);
+    const breakdown = computePpnBreakdown(hargaJualNetto);
     dpp = breakdown.dpp; ppn = breakdown.ppn; productPayment = breakdown.total;
+  }else{
+    displaySub = subGross;
+    displayDiscount = discount;
+    productPayment = Math.max(0, subGross - discount);
   }
   const nonPkpPayment = shippingCost + insuranceCost + packingCost;
   const grand = productPayment + nonPkpPayment;
-  return { hargaJual, includePpn, dpp, ppn, productPayment, nonPkpPayment, grand };
+  return { subGross, displaySub, displayDiscount, includePpn, dpp, ppn, productPayment, nonPkpPayment, grand };
 }
 function setStatus(msg, cls){
   const el = document.getElementById("status");
@@ -1507,8 +1533,8 @@ async function previewPDF(){
   const insuranceCost = getInsuranceCost();
   const packingCost = getPackingCost();
   const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-  const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
-    computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
+  const { displaySub, displayDiscount, includePpn, ppn, productPayment, nonPkpPayment, grand } =
+    computeInvoiceTotals(items, discount, shippingCost, insuranceCost, packingCost);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "cm", format: "a4" });
   const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
@@ -1540,8 +1566,11 @@ async function previewPDF(){
     : "Bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
   const openLines = doc.splitTextToSize(opening, CW);
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
-  const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
-  const footRows = buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
+  const body = items.map((it,i) => {
+    const amt = getItemDisplayAmounts(it, includePpn);
+    return [String(i+1), it.name || "-", String(it.qty), fmtRp(amt.unit), fmtRp(amt.lineTotal)];
+  });
+  const footRows = buildPdfFootRows(displaySub, displayDiscount, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
     head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1609,8 +1638,8 @@ async function generatePDF(){
     const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
-      computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
+    const { displaySub, displayDiscount, includePpn, ppn, productPayment, nonPkpPayment, grand } =
+      computeInvoiceTotals(items, discount, shippingCost, insuranceCost, packingCost);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "cm", format: "a4" });
@@ -1657,10 +1686,11 @@ async function generatePDF(){
     const openLines = doc.splitTextToSize(opening, CW);
     doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
 
-    const body = items.map((it,i) => [
-      String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
-    ]);
-    const footRows = buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
+    const body = items.map((it,i) => {
+      const amt = getItemDisplayAmounts(it, includePpn);
+      return [String(i+1), it.name || "-", String(it.qty), fmtRp(amt.unit), fmtRp(amt.lineTotal)];
+    });
+    const footRows = buildPdfFootRows(displaySub, displayDiscount, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1763,8 +1793,8 @@ async function generateDOCX(){
     const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
-      computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
+    const { displaySub, displayDiscount, includePpn, ppn, productPayment, nonPkpPayment, grand } =
+      computeInvoiceTotals(items, discount, shippingCost, insuranceCost, packingCost);
 
     const cellText = (text, opts={}) => new TableCell({
       children:[ new Paragraph({ alignment: opts.align || AlignmentType.LEFT,
@@ -1782,26 +1812,27 @@ async function generateDOCX(){
     ]});
     const itemRows = items.map((it,i) => {
       const stripe = i % 2 === 1 ? "f2f2f2" : undefined;
+      const amt = getItemDisplayAmounts(it, includePpn);
       return new TableRow({ children: [
         cellText(i+1, { align:AlignmentType.CENTER, fill:stripe }),
         cellText(it.name || "-", { fill:stripe }),
         cellText(it.qty, { align:AlignmentType.CENTER, fill:stripe }),
-        cellText(fmtRp(it.price), { align:AlignmentType.RIGHT, fill:stripe }),
-        cellText(fmtRp(it.qty*it.price), { align:AlignmentType.RIGHT, fill:stripe }),
+        cellText(fmtRp(amt.unit), { align:AlignmentType.RIGHT, fill:stripe }),
+        cellText(fmtRp(amt.lineTotal), { align:AlignmentType.RIGHT, fill:stripe }),
       ]});
     });
     const blankCell = () => new TableCell({ children:[new Paragraph("")] });
     const totalRows = [
       new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("Subtotal", { bold:true, align:AlignmentType.RIGHT }),
-        cellText(fmtRp(sub), { bold:true, align:AlignmentType.RIGHT }) ] }),
-      ...(discount>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+        cellText(fmtRp(displaySub), { bold:true, align:AlignmentType.RIGHT }) ] }),
+      ...(displayDiscount>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("Diskon", { align:AlignmentType.RIGHT, color:"C0392B" }),
-        cellText("- "+fmtRp(discount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
+        cellText("- "+fmtRp(displayDiscount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
       ...(includePpn ? [
         new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
           cellText("Harga Jual (Netto)", { align:AlignmentType.RIGHT }),
-          cellText(fmtRp(Math.max(0, sub - discount)), { align:AlignmentType.RIGHT }) ] }),
+          cellText(fmtRp(Math.max(0, displaySub - displayDiscount)), { align:AlignmentType.RIGHT }) ] }),
         new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
           cellText("PPN 11%", { align:AlignmentType.RIGHT }),
           cellText(fmtRp(ppn), { align:AlignmentType.RIGHT }) ] }),
