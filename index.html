@@ -263,8 +263,9 @@
     </select>
 
     <label>Template PDF</label>
-    <select id="pdfTemplate">
-      <option value="Formal Letter">Formal Letter</option>
+    <select id="pdfTemplate" onchange="saveDraft()">
+      <option value="normal">Invoice Normal</option>
+      <option value="ppn11">Invoice PPN 11%</option>
     </select>
 
     <div class="row2">
@@ -698,6 +699,7 @@ function escapeHtml(s){
 function collectDraft(){
   return {
     docType: document.getElementById("docType").value,
+    pdfTemplate: document.getElementById("pdfTemplate").value,
     docNum: document.getElementById("docNum").value,
     docDate: document.getElementById("docDate").value,
     poReference: document.getElementById("poReference").value,
@@ -725,6 +727,7 @@ function loadDraft(){
     const draft = JSON.parse(raw);
     if(!draft || typeof draft !== "object") return false;
     if(draft.docType) document.getElementById("docType").value = draft.docType;
+    if(draft.pdfTemplate) document.getElementById("pdfTemplate").value = draft.pdfTemplate;
     if(draft.docNum) document.getElementById("docNum").value = draft.docNum;
     if(draft.docDate) document.getElementById("docDate").value = draft.docDate;
     document.getElementById("poReference").value = draft.poReference || "";
@@ -1321,13 +1324,17 @@ function validateBeforeGenerate(requireSupabase=true){
   if(requireSupabase && !requireSupabaseAuth()) return false;
   return true;
 }
-function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, colors){
+function buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, colors){
   const { FB, FN, FV, FR } = colors;
   const shippingBlock = getShippingBlockText();
   const totalRows = [
     { label:"Sub-total", value:fmtRp(sub), style:"normal" },
   ];
   if(discount>0) totalRows.push({ label:"Discount", value:"- "+fmtRp(discount), style:"discount" });
+  if(includePpn){
+    totalRows.push({ label:"DPP Nilai Lain (11/12)", value:fmtRp(dpp), style:"normal" });
+    totalRows.push({ label:"PPN 12% (efektif 11%)", value:fmtRp(ppn), style:"normal" });
+  }
   if(shippingCost>0) totalRows.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"shipping" });
   if(insuranceCost>0) totalRows.push({ label:"Asuransi", value:fmtRp(insuranceCost), style:"shipping" });
   if(packingCost>0) totalRows.push({ label:"Packing Kayu", value:fmtRp(packingCost), style:"shipping" });
@@ -1357,6 +1364,7 @@ function buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCos
     return cells;
   });
 }
+const PPN_DISCLAIMER = "* Perhitungan PPN memakai skema DPP Nilai Lain (11/12 x Harga Jual) sesuai PMK 131/2024 - tarif nominal 12% efektif 11%. Nilai final berpotensi berbeda beberapa rupiah dari Faktur Pajak resmi di Coretax karena pembulatan saat input manual.";
 function addPaymentSection(doc, y, margin, CW, colors, productPayment, nonPkpPayment){
   const { FB, FL, FN, FV, FR } = colors;
   const nonPkpLabel = getNonPkpPaymentLabel();
@@ -1399,6 +1407,38 @@ function addPoReferenceLine(doc, y, margin, FG){
   doc.setFont("times","bold");
   doc.text(poRef, margin + 2.6, y);
   return y + 0.32; // jarak dari baris Referensi PO turun ke garis pemisah
+}
+/* ===============================================================
+   PERHITUNGAN PPN — mengikuti skema DPP Nilai Lain PMK 131/2024
+   yang dipakai Coretax untuk barang/jasa non-mewah:
+     DPP Nilai Lain = 11/12 x Harga Jual (dibulatkan ke rupiah)
+     PPN terutang   = 12% x DPP Nilai Lain (dibulatkan ke rupiah)
+     Total tagihan  = Harga Jual + PPN terutang  (efektif = 11% x Harga Jual)
+   PENTING: Coretax TIDAK menghitung DPP nilai lain secara otomatis —
+   PKP wajib hitung manual lalu key-in. Pembulatan di sini mengikuti
+   praktik umum (bulat ke rupiah terdekat di tiap tahap), tapi selisih
+   beberapa rupiah dengan Faktur Pajak resmi tetap mungkin terjadi
+   tergantung cara staf pajak membulatkan saat input manual.
+=============================================================== */
+function computePpnBreakdown(hargaJual){
+  const dpp = Math.round(hargaJual * 11 / 12);
+  const ppn = Math.round(dpp * 0.12);
+  return { dpp, ppn, total: hargaJual + ppn };
+}
+function getPdfTemplate(){
+  return document.getElementById("pdfTemplate")?.value || "normal";
+}
+function computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost){
+  const hargaJual = Math.max(0, sub - discount);
+  const includePpn = getPdfTemplate() === "ppn11";
+  let dpp = 0, ppn = 0, productPayment = hargaJual;
+  if(includePpn){
+    const breakdown = computePpnBreakdown(hargaJual);
+    dpp = breakdown.dpp; ppn = breakdown.ppn; productPayment = breakdown.total;
+  }
+  const nonPkpPayment = shippingCost + insuranceCost + packingCost;
+  const grand = productPayment + nonPkpPayment;
+  return { hargaJual, includePpn, dpp, ppn, productPayment, nonPkpPayment, grand };
 }
 function setStatus(msg, cls){
   const el = document.getElementById("status");
@@ -1466,9 +1506,8 @@ async function previewPDF(){
   const insuranceCost = getInsuranceCost();
   const packingCost = getPackingCost();
   const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-  const productPayment = Math.max(0, sub - discount);
-  const nonPkpPayment = shippingCost + insuranceCost + packingCost;
-  const grand = productPayment + nonPkpPayment;
+  const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
+    computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "cm", format: "a4" });
   const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
@@ -1501,7 +1540,7 @@ async function previewPDF(){
   const openLines = doc.splitTextToSize(opening, CW);
   doc.text(openLines, margin, y); y += openLines.length*0.48 + 0.4;
   const body = items.map((it,i) => [String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)]);
-  const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
+  const footRows = buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
   doc.autoTable({
     startY:y, margin:{left:margin,right:margin},
     head:[["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1515,6 +1554,12 @@ async function previewPDF(){
   });
   y = doc.lastAutoTable.finalY + 0.64;
   y = addPaymentSection(doc, y, margin, CW, { FB, FL, FN, FV, FR }, productPayment, nonPkpPayment);
+  if(includePpn){
+    doc.setFont("times","italic"); doc.setFontSize(7.5); doc.setTextColor(...FG);
+    const disclaimerLines = doc.splitTextToSize(PPN_DISCLAIMER, CW);
+    doc.text(disclaimerLines, margin, y);
+    y += disclaimerLines.length*0.32 + 0.3;
+  }
   doc.addPage();
   y = 1.5;
   doc.addImage(KOP_IMG, "PNG", margin, y, CW, kopH); y += kopH;
@@ -1563,9 +1608,8 @@ async function generatePDF(){
     const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const productPayment = Math.max(0, sub - discount);
-    const nonPkpPayment = shippingCost + insuranceCost + packingCost;
-    const grand = productPayment + nonPkpPayment;
+    const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
+      computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "cm", format: "a4" });
@@ -1615,7 +1659,7 @@ async function generatePDF(){
     const body = items.map((it,i) => [
       String(i+1), it.name || "-", String(it.qty), fmtRp(it.price), fmtRp(it.qty*it.price)
     ]);
-    const footRows = buildPdfFootRows(sub, discount, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
+    const footRows = buildPdfFootRows(sub, discount, dpp, ppn, includePpn, shippingCost, insuranceCost, packingCost, grand, { FB, FN, FV, FR });
     doc.autoTable({
       startY: y, margin: { left: margin, right: margin },
       head: [["No.","Nama Produk","Qty","Harga Satuan","Total"]],
@@ -1637,6 +1681,13 @@ async function generatePDF(){
     y = doc.lastAutoTable.finalY + 0.64;
 
     y = addPaymentSection(doc, y, margin, CW, { FB, FL, FN, FV, FR }, productPayment, nonPkpPayment);
+
+    if(includePpn){
+      doc.setFont("times","italic"); doc.setFontSize(7.5); doc.setTextColor(...FG);
+      const disclaimerLines = doc.splitTextToSize(PPN_DISCLAIMER, CW);
+      doc.text(disclaimerLines, margin, y);
+      y += disclaimerLines.length*0.32 + 0.3;
+    }
 
     doc.setFont("times","normal"); doc.setFontSize(10); doc.setTextColor(...FB);
     doc.text("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.", margin, y, { maxWidth: CW }); y += 0.62;
@@ -1711,9 +1762,8 @@ async function generateDOCX(){
     const packingCost = getPackingCost();
     const shippingText = getShippingText();
     const sub = items.reduce((s,i)=> s + (i.qty*i.price), 0);
-    const productPayment = Math.max(0, sub - discount);
-    const nonPkpPayment = shippingCost + insuranceCost + packingCost;
-    const grand = productPayment + nonPkpPayment;
+    const { includePpn, dpp, ppn, productPayment, nonPkpPayment, grand } =
+      computeInvoiceTotals(sub, discount, shippingCost, insuranceCost, packingCost);
 
     const cellText = (text, opts={}) => new TableCell({
       children:[ new Paragraph({ alignment: opts.align || AlignmentType.LEFT,
@@ -1747,6 +1797,14 @@ async function generateDOCX(){
       ...(discount>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText("Diskon", { align:AlignmentType.RIGHT, color:"C0392B" }),
         cellText("- "+fmtRp(discount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
+      ...(includePpn ? [
+        new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+          cellText("DPP Nilai Lain (11/12)", { align:AlignmentType.RIGHT }),
+          cellText(fmtRp(dpp), { align:AlignmentType.RIGHT }) ] }),
+        new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
+          cellText("PPN 12% (efektif 11%)", { align:AlignmentType.RIGHT }),
+          cellText(fmtRp(ppn), { align:AlignmentType.RIGHT }) ] }),
+      ] : []),
       ...(shippingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
         cellText(getShippingLabel(), { bold:true, align:AlignmentType.RIGHT }),
         cellText(fmtRp(shippingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
@@ -1820,6 +1878,9 @@ async function generateDOCX(){
           new TextRun({ text:"003 888 3111  a/n  Andrew", bold:true, color:"C0392B" }) ] }),
       ] : []),
       new Paragraph({ text:"" }),
+      ...(includePpn ? [ new Paragraph({ children:[
+        new TextRun({ text:PPN_DISCLAIMER, italics:true, size:15, color:"555555" }),
+      ]}), new Paragraph({ text:"" }) ] : []),
       new Paragraph({ text:"Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation." }),
       new Paragraph({ text:"Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih." }),
       new Paragraph({ text:"" }),
