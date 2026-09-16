@@ -1810,7 +1810,8 @@ async function generateDOCX(){
   btn.disabled = true; btn.textContent = "⏳ Generating...";
   try{
     const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-            AlignmentType, WidthType, BorderStyle, ShadingType, TabStopType, VerticalAlign } = docx;
+            AlignmentType, WidthType, BorderStyle, ShadingType, TabStopType, VerticalAlign,
+            LineRuleType } = docx;
 
     const docKey = document.getElementById("docType").value;
     const prefix = docPrefix(docKey);
@@ -1841,18 +1842,21 @@ async function generateDOCX(){
     const B_THIN = { style: BorderStyle.SINGLE, size: 2, color: C_LINE };
     const TBL_BORDERS = { top:B_THIN, bottom:B_THIN, left:B_THIN, right:B_THIN,
       insideHorizontal:B_THIN, insideVertical:B_THIN };
+    const LINE = { line: 260, lineRule: LineRuleType.AUTO }; // ~1.08x — mendekati pitch PDF 0.48cm
     const para = (text, o={}) => new Paragraph({
       alignment: o.align, indent: o.indent,
-      spacing: { before: o.before || 0, after: o.after ?? 100 },
+      spacing: { before: o.before || 0, after: o.after ?? 100, ...LINE },
       children: [ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
         size: o.size || 20, color: o.color, font: F_TIMES }) ],
     });
     const hline = (color, size, before=0, after=0, indent) => new Paragraph({
-      text: "", indent, spacing: { before, after },
+      text: "", indent,
+      spacing: { before, after, line: 40, lineRule: LineRuleType.AT_LEAST },
       border: { bottom: { style: BorderStyle.SINGLE, size, color, space: 1 } },
     });
     const cellText = (text, o={}) => new TableCell({
       children:[ new Paragraph({ alignment: o.align || AlignmentType.LEFT,
+        spacing: LINE,
         children:[ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
           color: o.color, size: o.size || 18, font: F_TIMES }) ] }) ],
       shading: o.fill ? { fill: o.fill, type: ShadingType.CLEAR, color:"auto" } : undefined,
@@ -1927,7 +1931,10 @@ async function generateDOCX(){
         transformation:{ width:642, height:642 / getKopAspect() } }) ] });
 
     const doc = new Document({
-      styles: { default: { document: { run: { font: F_TIMES, size: 20 } } } },
+      styles: { default: { document: {
+        run: { font: F_TIMES, size: 20 },
+        paragraph: { spacing: LINE },
+      } } },
       sections: [{
         properties: { page: {
           size: { width:11906, height:16838 },                     // A4
