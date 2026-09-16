@@ -1810,7 +1810,7 @@ async function generateDOCX(){
   btn.disabled = true; btn.textContent = "⏳ Generating...";
   try{
     const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell,
-            AlignmentType, WidthType, BorderStyle, ShadingType } = docx;
+            AlignmentType, WidthType, BorderStyle, ShadingType, TabStopType, VerticalAlign } = docx;
 
     const docKey = document.getElementById("docType").value;
     const prefix = docPrefix(docKey);
@@ -1833,22 +1833,43 @@ async function generateDOCX(){
     const { displaySub, displayDiscount, includePpn, ppn, productPayment, nonPkpPayment, grand } =
       computeInvoiceTotals(items, discount, shippingCost, insuranceCost, packingCost);
 
-    const cellText = (text, opts={}) => new TableCell({
-      children:[ new Paragraph({ alignment: opts.align || AlignmentType.LEFT,
-        children:[ new TextRun({ text: String(text), bold: !!opts.bold, color: opts.color, size: 18 }) ] }) ],
-      shading: opts.fill ? { fill: opts.fill, type: ShadingType.CLEAR } : undefined,
-      width: opts.width ? { size: opts.width, type: WidthType.PERCENTAGE } : undefined,
+    /* ---- Style helper: mengikuti layout versi PDF (Times, margin 2cm, tabel bergaris) ---- */
+    const F_TIMES = "Times New Roman";
+    const C_TXT = "1a1a1a", C_GRAY = "555555", C_LINE = "999999";
+    const C_GREEN = "1a7a2e", C_RED = "c0392b", C_STRIPE = "f2f2f2";
+    const CW_TW = 9638; // lebar konten = A4 11906 - margin kiri+kanan 2x1134 twips
+    const B_THIN = { style: BorderStyle.SINGLE, size: 2, color: C_LINE };
+    const TBL_BORDERS = { top:B_THIN, bottom:B_THIN, left:B_THIN, right:B_THIN,
+      insideHorizontal:B_THIN, insideVertical:B_THIN };
+    const para = (text, o={}) => new Paragraph({
+      alignment: o.align, indent: o.indent,
+      spacing: { before: o.before || 0, after: o.after ?? 100 },
+      children: [ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
+        size: o.size || 20, color: o.color, font: F_TIMES }) ],
+    });
+    const hline = (color, size, before=0, after=0, indent) => new Paragraph({
+      text: "", indent, spacing: { before, after },
+      border: { bottom: { style: BorderStyle.SINGLE, size, color, space: 1 } },
+    });
+    const cellText = (text, o={}) => new TableCell({
+      children:[ new Paragraph({ alignment: o.align || AlignmentType.LEFT,
+        children:[ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
+          color: o.color, size: o.size || 18, font: F_TIMES }) ] }) ],
+      shading: o.fill ? { fill: o.fill, type: ShadingType.CLEAR, color:"auto" } : undefined,
+      width: o.width ? { size: o.width, type: WidthType.PERCENTAGE } : undefined,
+      columnSpan: o.colSpan, rowSpan: o.rowSpan, verticalAlign: o.valign,
+      margins: { top: 40, bottom: 40, left: 85, right: 85 },
     });
 
     const headerRow = new TableRow({ children: [
-      cellText("No.", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.CENTER, width:8 }),
-      cellText("Nama Produk", { bold:true, color:"FFFFFF", fill:"1a1a1a", width:42 }),
-      cellText("Qty", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.CENTER, width:10 }),
-      cellText("Harga Satuan", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
-      cellText("Total", { bold:true, color:"FFFFFF", fill:"1a1a1a", align:AlignmentType.RIGHT, width:20 }),
+      cellText("No.", { bold:true, color:"FFFFFF", fill:C_TXT, align:AlignmentType.CENTER, width:5 }),
+      cellText("Nama Produk", { bold:true, color:"FFFFFF", fill:C_TXT, width:45 }),
+      cellText("Qty", { bold:true, color:"FFFFFF", fill:C_TXT, align:AlignmentType.CENTER, width:7 }),
+      cellText("Harga Satuan", { bold:true, color:"FFFFFF", fill:C_TXT, align:AlignmentType.RIGHT, width:22 }),
+      cellText("Total", { bold:true, color:"FFFFFF", fill:C_TXT, align:AlignmentType.RIGHT, width:21 }),
     ]});
     const itemRows = items.map((it,i) => {
-      const stripe = i % 2 === 1 ? "f2f2f2" : undefined;
+      const stripe = i % 2 === 1 ? C_STRIPE : undefined;
       const amt = getItemDisplayAmounts(it, includePpn);
       return new TableRow({ children: [
         cellText(i+1, { align:AlignmentType.CENTER, fill:stripe }),
@@ -1858,112 +1879,116 @@ async function generateDOCX(){
         cellText(fmtRp(amt.lineTotal), { align:AlignmentType.RIGHT, fill:stripe }),
       ]});
     });
-    const blankCell = () => new TableCell({ children:[new Paragraph("")] });
-    const totalRows = [
-      new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText("Subtotal", { bold:true, align:AlignmentType.RIGHT }),
-        cellText(fmtRp(displaySub), { bold:true, align:AlignmentType.RIGHT }) ] }),
-      ...(displayDiscount>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText("Diskon", { align:AlignmentType.RIGHT, color:"C0392B" }),
-        cellText("- "+fmtRp(displayDiscount), { align:AlignmentType.RIGHT, color:"C0392B" }) ] }) ] : []),
-      ...(includePpn ? [
-        new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-          cellText("Harga Jual (Netto)", { align:AlignmentType.RIGHT }),
-          cellText(fmtRp(Math.max(0, displaySub - displayDiscount)), { align:AlignmentType.RIGHT }) ] }),
-        new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-          cellText("PPN 11%", { align:AlignmentType.RIGHT }),
-          cellText(fmtRp(ppn), { align:AlignmentType.RIGHT }) ] }),
-      ] : []),
-      ...(shippingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText(getShippingLabel(), { bold:true, align:AlignmentType.RIGHT }),
-        cellText(fmtRp(shippingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
-      ...(insuranceCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText("Asuransi", { bold:true, align:AlignmentType.RIGHT }),
-        cellText(fmtRp(insuranceCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
-      ...(packingCost>0 ? [ new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText("Packing Kayu", { bold:true, align:AlignmentType.RIGHT }),
-        cellText(fmtRp(packingCost), { bold:true, align:AlignmentType.RIGHT }) ] }) ] : []),
-      new TableRow({ children:[ blankCell(), blankCell(), blankCell(),
-        cellText("GRAND TOTAL", { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }),
-        cellText(fmtRp(grand), { bold:true, color:"FFFFFF", fill:"1a7a2e", align:AlignmentType.RIGHT }) ] }),
-    ];
+
+    // Baris total — label/urutan sama seperti buildPdfFootRows versi PDF,
+    // kolom kiri berisi blok teks ongkir (colSpan 3, rowSpan semua baris total)
+    const totalsSpec = [{ label:"Sub-total", value:fmtRp(displaySub), style:"normal" }];
+    if(displayDiscount>0) totalsSpec.push({ label:"Discount", value:"- "+fmtRp(displayDiscount), style:"discount" });
+    if(includePpn){
+      totalsSpec.push({ label:"Harga Jual (Netto)", value:fmtRp(Math.max(0, displaySub - displayDiscount)), style:"normal" });
+      totalsSpec.push({ label:"PPN 11%", value:fmtRp(ppn), style:"normal" });
+    }
+    if(shippingCost>0) totalsSpec.push({ label:getShippingLabel(), value:fmtRp(shippingCost), style:"ship" });
+    if(insuranceCost>0) totalsSpec.push({ label:"Asuransi", value:fmtRp(insuranceCost), style:"ship" });
+    if(packingCost>0) totalsSpec.push({ label:"Packing Kayu", value:fmtRp(packingCost), style:"ship" });
+    totalsSpec.push({ label:"TOTAL", value:fmtRp(grand), style:"grand" });
+    const totalRows = totalsSpec.map((row, i) => {
+      const isGrand = row.style === "grand";
+      const cells = [];
+      if(i === 0){
+        cells.push(cellText(getShippingBlockText(), { colSpan:3, rowSpan: totalsSpec.length,
+          width:57, align:AlignmentType.RIGHT, valign:VerticalAlign.CENTER, size:16 }));
+      }
+      const o = {
+        align: AlignmentType.RIGHT,
+        bold: isGrand || row.style === "ship",
+        italics: row.style === "discount",
+        color: isGrand ? "FFFFFF" : (row.style === "discount" ? C_RED : C_TXT),
+        fill: isGrand ? C_GREEN : undefined,
+      };
+      cells.push(cellText(row.label, { ...o, width:22 }), cellText(row.value, { ...o, width:21 }));
+      return new TableRow({ children: cells });
+    });
+
+    const payTable = (rows, w, fill, valColor) => new Table({
+      width: { size:100, type:WidthType.PERCENTAGE }, borders: TBL_BORDERS,
+      rows: rows.map(([label, val]) => new TableRow({ children: [
+        cellText(label, { bold:true, width:w[0], fill }),
+        cellText(val, { bold:true, width:w[1], fill, color:valColor }),
+      ]})),
+    });
 
     const opening = docKey === "Proforma Invoice"
-      ? "Dengan hormat, bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
-      : "Dengan hormat, bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
+      ? "Bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
+      : "Bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
 
-    const custParas = [
-      new Paragraph({ children:[ new TextRun("Kepada Yth.") ] }),
-      new Paragraph({ children:[ new TextRun({ text: customer.name || "-", bold:true }) ] }),
-    ];
-    if(customer.phone) custParas.push(new Paragraph(`No. Telepon : ${customer.phone}`));
-    if(customer.email) custParas.push(new Paragraph(`Email           : ${customer.email}`));
-    custParas.push(new Paragraph("di Tempat"));
+    const kopImage = () => new Paragraph({ alignment: AlignmentType.CENTER,
+      children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
+        transformation:{ width:642, height:642 / getKopAspect() } }) ] });
 
-    const syaratParas = SYARAT_ISI.map((line,i) =>
-      new Paragraph({ text: `${i+1}.  ${line}`, indent: { left: 360 } }));
-
-    const doc = new Document({ sections: [{ children: [
-      new Paragraph({ alignment: AlignmentType.CENTER,
-        children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
-          transformation:{ width:550, height:550 / getKopAspect() } }) ] }),
-      new Paragraph({ text:"" }),
-      new Paragraph({ children:[
-        new TextRun({ text:`No. : ${num}`, bold:true }),
-        new TextRun({ text:`\t\t\t\t\tJakarta, ${dateStr}` }),
-      ]}),
-      ...(getPoReference() ? [ new Paragraph({ children:[
-        new TextRun({ text:"Referensi PO : ", italics:true, color:"555555" }),
-        new TextRun({ text:getPoReference(), bold:true, color:"555555" }),
-      ]}) ] : []),
-      new Paragraph({ text:"" }),
-      new Paragraph({ alignment: AlignmentType.CENTER,
-        children:[ new TextRun({ text: judul.toUpperCase(), bold:true, size:26 }) ] }),
-      new Paragraph({ text:"" }),
-      ...custParas,
-      new Paragraph({ text:"" }),
-      new Paragraph({ text: opening }),
-      new Paragraph({ text:"" }),
-      new Table({ width:{ size:100, type:WidthType.PERCENTAGE },
-        rows: [ headerRow, ...itemRows, ...totalRows ] }),
-      ...(shippingText ? [
-        new Paragraph({ text:"" }),
-        new Paragraph({ children:[ new TextRun({ text:"Detail Ongkir POS", bold:true }) ] }),
-        ...shippingText.split(/\r?\n/).filter(Boolean).map(line => new Paragraph({ text: line })),
-      ] : []),
-      new Paragraph({ text:"" }),
-      new Paragraph({ text:"Pembayaran dapat ditransfer sesuai rincian berikut:" }),
-      new Paragraph({ children:[ new TextRun({ text:"Barang / Produk   ", bold:true }),
-        new TextRun({ text:fmtRp(productPayment), bold:true, color:"1a7a2e" }) ] }),
-      new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
-        new TextRun({ text:"693-0310-105  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
-      new Paragraph({ children:[ new TextRun({ text:"Bank Mandiri   ", bold:true }),
-        new TextRun({ text:"1200012717422  a/n  CV TEMAN BAIK", bold:true, color:"1a7a2e" }) ] }),
-      ...(nonPkpPayment > 0 ? [
-        new Paragraph({ text:"" }),
-        new Paragraph({ children:[ new TextRun({ text:`${getNonPkpPaymentLabel()}   `, bold:true }),
-          new TextRun({ text:fmtRp(nonPkpPayment), bold:true, color:"C0392B" }) ] }),
-        new Paragraph({ children:[ new TextRun({ text:"Bank BCA   ", bold:true }),
-          new TextRun({ text:"003 888 3111  a/n  Andrew", bold:true, color:"C0392B" }) ] }),
-      ] : []),
-      new Paragraph({ text:"" }),
-      ...(includePpn ? [ new Paragraph({ children:[
-        new TextRun({ text:PPN_DISCLAIMER, italics:true, size:15, color:"555555" }),
-      ]}), new Paragraph({ text:"" }) ] : []),
-      new Paragraph({ text:"Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation." }),
-      new Paragraph({ text:"Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih." }),
-      new Paragraph({ text:"" }),
-      new Paragraph({ children:[ new ImageRun({ data: dataUriToUint8Array(getCapImg()), type:"jpg",
-        transformation:{ width:130, height:130*(119/207) } }) ] }),
-      new Paragraph({ text:"", pageBreakBefore: true }),
-      new Paragraph({ alignment: AlignmentType.CENTER,
-        children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
-          transformation:{ width:550, height:550 / getKopAspect() } }) ] }),
-      new Paragraph({ text:"" }),
-      new Paragraph({ children:[ new TextRun({ text:"Syarat & Ketentuan", bold:true, size:24 }) ] }),
-      new Paragraph({ text:"" }),
-      ...syaratParas,
-    ]}]});
+    const doc = new Document({
+      styles: { default: { document: { run: { font: F_TIMES, size: 20 } } } },
+      sections: [{
+        properties: { page: {
+          size: { width:11906, height:16838 },                     // A4
+          margin: { top:850, right:1134, bottom:1134, left:1134 }, // 1.5cm atas, 2cm samping
+        }},
+        children: [
+          kopImage(),
+          hline(C_TXT, 16, 125),                                  // garis tebal bawah kop
+          new Paragraph({ spacing:{ before:240, after:0 },
+            tabStops:[{ type:TabStopType.RIGHT, position:CW_TW }],
+            children:[
+              new TextRun({ text:"No. : ", font:F_TIMES, size:20 }),
+              new TextRun({ text:num, bold:true, font:F_TIMES, size:20 }),
+              new TextRun({ text:`\tJakarta, ${dateStr}`, font:F_TIMES, size:20 }),
+            ]}),
+          getPoReference()
+            ? para(`Referensi PO :  ${getPoReference()}`, { italics:true, color:C_GRAY, after:180 })
+            : para("", { after:140 }),
+          hline(C_LINE, 4),                                       // garis tipis abu
+          para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:430 }),
+          hline(C_GREEN, 6, 110, 400, { left:2890, right:2890 }), // garis hijau ~40% di tengah
+          para("Kepada Yth.", { after:270 }),
+          para(customer.name || "-", { bold:true, after:270 }),
+          ...(customer.phone ? [para(`No. Telepon : ${customer.phone}`, { after:270 })] : []),
+          ...(customer.email ? [para(`Email           : ${customer.email}`, { after:270 })] : []),
+          para("di Tempat", { after:400 }),
+          para("Dengan hormat,", { after:270 }),
+          para(opening, { after:230 }),
+          new Table({ width:{ size:100, type:WidthType.PERCENTAGE }, borders: TBL_BORDERS,
+            rows: [ headerRow, ...itemRows, ...totalRows ] }),
+          para("Pembayaran dapat ditransfer sesuai rincian berikut:", { before:360, after:120 }),
+          payTable([
+            ["Barang / Produk", fmtRp(productPayment)],
+            ["Bank BCA", "693-0310-105  a/n  CV TEMAN BAIK"],
+            ["Bank Mandiri", "1200012717422  a/n  CV TEMAN BAIK"],
+          ], [25,75], C_STRIPE, C_GREEN),
+          ...(nonPkpPayment > 0 ? [ payTable([
+            [getNonPkpPaymentLabel(), fmtRp(nonPkpPayment)],
+            ["Bank BCA", "003 888 3111  a/n  Andrew"],
+          ], [35,65], "FFFFFF", C_RED) ] : []),
+          ...(includePpn ? [ para(PPN_DISCLAIMER,
+            { italics:true, size:15, color:C_GRAY, before:160, after:160 }) ] : []),
+          para("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.",
+            { before:340, after:350 }),
+          para("Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih."),
+          para("Page : 1/2", { align:AlignmentType.RIGHT, italics:true, size:16, color:C_GRAY, before:450 }),
+          // ---- Halaman 2: Syarat & Ketentuan ----
+          new Paragraph({ text:"", pageBreakBefore:true }),
+          kopImage(),
+          hline(C_TXT, 16, 125),
+          para("Syarat & Ketentuan", { bold:true, size:22, before:390, after:120 }),
+          hline(C_LINE, 4, 0, 270),
+          ...SYARAT_ISI.map((line,i) =>
+            para(`${i+1}.  ${line}`, { size:18, indent:{ left:283 }, after:80 })),
+          new Paragraph({ spacing:{ before:560 },
+            children:[ new ImageRun({ data: dataUriToUint8Array(getCapImg()), type:"jpg",
+              transformation:{ width:130, height:75 } }) ] }),
+          para("Page : 2/2", { align:AlignmentType.RIGHT, italics:true, size:16, color:C_GRAY, before:300 }),
+        ],
+      }],
+    });
 
     const blob = await Packer.toBlob(doc);
     const safeName = (customer.name || "customer").replace(/[^\w\-]/g,"_");
