@@ -510,7 +510,7 @@ async function loadBranchProfile(){
   currentBranch = null;
   if(sb && currentUser){
     const { data, error } = await sb.from("profiles")
-      .select("branch_code, branches(code, name, number_infix, kop_img, cap_img)")
+      .select("branch_code, branches(code, name, number_infix, kop_img, cap_img, kop_aspect)")
       .eq("user_id", currentUser.id)
       .maybeSingle();
     if(error){ console.warn("Gagal load profil cabang:", error); }
@@ -530,6 +530,7 @@ function docPrefix(docKey){
   return infix ? `${DOC_TYPES[docKey].prefix}-${infix}` : DOC_TYPES[docKey].prefix;
 }
 function getKopImg(){ return currentBranch?.kop_img || KOP_IMG; }
+function getKopAspect(){ return Number(currentBranch?.kop_aspect) || KOP_ASPECT; }
 function getCapImg(){ return currentBranch?.cap_img || CAP_IMG; }
 async function loginUser(){
   if(!sb){ alert("Simpan koneksi Supabase dulu."); return; }
@@ -1576,7 +1577,7 @@ async function previewPDF(){
   const W = 21.0, H = 29.7, margin = 2.0, CW = W - margin*2;
   const FB = [26,26,26], FG = [85,85,85], FL = [242,242,242], FN = [153,153,153], FV = [26,122,46], FR = [192,57,43];
   let y = 1.5;
-  const kopH = CW / KOP_ASPECT;
+  const kopH = CW / getKopAspect();
   doc.addImage(getKopImg(), "PNG", margin, y, CW, kopH);
   y += kopH + KOP_GAP;
   doc.setDrawColor(...FB); doc.setLineWidth(0.07); doc.line(margin, y, W-margin, y);
@@ -1684,7 +1685,7 @@ async function generatePDF(){
     const FV = [26,122,46], FR = [192,57,43];
     let y = 1.5;
 
-    const kopH = CW / KOP_ASPECT;
+    const kopH = CW / getKopAspect();
     doc.addImage(getKopImg(), "PNG", margin, y, CW, kopH);
     y += kopH + KOP_GAP;
     doc.setDrawColor(...FB); doc.setLineWidth(0.07);
@@ -1905,7 +1906,7 @@ async function generateDOCX(){
     const doc = new Document({ sections: [{ children: [
       new Paragraph({ alignment: AlignmentType.CENTER,
         children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
-          transformation:{ width:550, height:550 / KOP_ASPECT } }) ] }),
+          transformation:{ width:550, height:550 / getKopAspect() } }) ] }),
       new Paragraph({ text:"" }),
       new Paragraph({ children:[
         new TextRun({ text:`No. : ${num}`, bold:true }),
@@ -1957,7 +1958,7 @@ async function generateDOCX(){
       new Paragraph({ text:"", pageBreakBefore: true }),
       new Paragraph({ alignment: AlignmentType.CENTER,
         children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
-          transformation:{ width:550, height:550 / KOP_ASPECT } }) ] }),
+          transformation:{ width:550, height:550 / getKopAspect() } }) ] }),
       new Paragraph({ text:"" }),
       new Paragraph({ children:[ new TextRun({ text:"Syarat & Ketentuan", bold:true, size:24 }) ] }),
       new Paragraph({ text:"" }),
