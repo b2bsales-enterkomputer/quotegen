@@ -1928,7 +1928,11 @@ async function generateDOCX(){
       ? "Bersama ini kami sampaikan proforma invoice untuk produk yang telah disepakati sebagai berikut:"
       : "Bersama surat ini kami sampaikan penawaran harga produk sebagai berikut:";
 
+    // Kop + garis tebal langsung jadi border bawah paragraf kop
+    // (space:6pt ≈ 0.21cm = KOP_GAP versi PDF)
     const kopImage = () => new Paragraph({ alignment: AlignmentType.CENTER,
+      spacing:{ after:0, ...LINE },
+      border:{ bottom:{ style:BorderStyle.SINGLE, size:16, color:C_TXT, space:6 } },
       children:[ new ImageRun({ data: dataUriToUint8Array(getKopImg()), type:"png",
         transformation:{ width:642, height:642 / getKopAspect() } }) ] });
 
@@ -1944,22 +1948,24 @@ async function generateDOCX(){
         }},
         children: [
           kopImage(),
-          hline(C_TXT, 16, 125),                                  // garis tebal bawah kop
-          new Paragraph({ spacing:{ before:240, after:0, ...LINE },
+          new Paragraph({ spacing:{ before:200, after:0, ...LINE },
             tabStops:[{ type:TabStopType.RIGHT, position:CW_TW }],
+            // garis tipis abu = border bawah baris ini (atau baris Referensi PO jika ada)
+            ...(getPoReference() ? {} : {
+              border:{ bottom:{ style:BorderStyle.SINGLE, size:4, color:C_LINE, space:7 } } }),
             children:[
               new TextRun({ text:"No. : ", font:F_TIMES, size:20 }),
               new TextRun({ text:num, bold:true, font:F_TIMES, size:20 }),
               new TextRun({ text:`\tJakarta, ${dateStr}`, font:F_TIMES, size:20 }),
             ]}),
           ...(getPoReference() ? [ new Paragraph({ spacing:{ ...LINE, after:0 },
+            border:{ bottom:{ style:BorderStyle.SINGLE, size:4, color:C_LINE, space:9 } },
             children:[
               new TextRun({ text:"Referensi PO : ", italics:true, size:20, color:C_GRAY, font:F_TIMES }),
               new TextRun({ text:getPoReference(), bold:true, size:20, color:C_GRAY, font:F_TIMES }),
             ]}) ] : []),
-          hline(C_LINE, 4, getPoReference() ? 180 : 140),         // garis tipis abu
-          para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:430 }),
-          hline(C_GREEN, 6, 110, 400, { left:2890, right:2890 }), // garis hijau ~40% di tengah
+          para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:380 }),
+          hline(C_GREEN, 6, 110, 360, { left:2890, right:2890 }), // garis hijau ~40% di tengah
           para("Kepada Yth."),
           para(customer.name || "-", { bold:true }),
           ...(customer.phone ? [para(`No. Telepon : ${customer.phone}`)] : []),
@@ -1988,8 +1994,7 @@ async function generateDOCX(){
           // ---- Halaman 2: Syarat & Ketentuan ----
           new Paragraph({ text:"", pageBreakBefore:true }),
           kopImage(),
-          hline(C_TXT, 16, 125),
-          para("Syarat & Ketentuan", { bold:true, size:22, before:390, after:120 }),
+          para("Syarat & Ketentuan", { bold:true, size:22, before:340, after:120 }),
           hline(C_LINE, 4, 0, 270),
           ...SYARAT_ISI.map((line,i) =>
             para(`${i+1}.  ${line}`, { size:18, indent:{ left:283 }, after:80 })),
