@@ -1842,10 +1842,12 @@ async function generateDOCX(){
     const B_THIN = { style: BorderStyle.SINGLE, size: 2, color: C_LINE };
     const TBL_BORDERS = { top:B_THIN, bottom:B_THIN, left:B_THIN, right:B_THIN,
       insideHorizontal:B_THIN, insideVertical:B_THIN };
-    const LINE = { line: 260, lineRule: LineRuleType.AUTO }; // ~1.08x — mendekati pitch PDF 0.48cm
+    const LINE = { line: 272, lineRule: LineRuleType.AT_LEAST }; // pitch 0.48cm/baris seperti PDF
+    // CATATAN: after/before di Word adalah jarak TAMBAHAN di atas pitch baris,
+    // bukan total jarak antar baris seperti `y +=` di versi PDF.
     const para = (text, o={}) => new Paragraph({
       alignment: o.align, indent: o.indent,
-      spacing: { before: o.before || 0, after: o.after ?? 100, ...LINE },
+      spacing: { before: o.before || 0, after: o.after ?? 0, ...LINE },
       children: [ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
         size: o.size || 20, color: o.color, font: F_TIMES }) ],
     });
@@ -1943,25 +1945,27 @@ async function generateDOCX(){
         children: [
           kopImage(),
           hline(C_TXT, 16, 125),                                  // garis tebal bawah kop
-          new Paragraph({ spacing:{ before:240, after:0 },
+          new Paragraph({ spacing:{ before:240, after:0, ...LINE },
             tabStops:[{ type:TabStopType.RIGHT, position:CW_TW }],
             children:[
               new TextRun({ text:"No. : ", font:F_TIMES, size:20 }),
               new TextRun({ text:num, bold:true, font:F_TIMES, size:20 }),
               new TextRun({ text:`\tJakarta, ${dateStr}`, font:F_TIMES, size:20 }),
             ]}),
-          getPoReference()
-            ? para(`Referensi PO :  ${getPoReference()}`, { italics:true, color:C_GRAY, after:180 })
-            : para("", { after:140 }),
-          hline(C_LINE, 4),                                       // garis tipis abu
+          ...(getPoReference() ? [ new Paragraph({ spacing:{ ...LINE, after:0 },
+            children:[
+              new TextRun({ text:"Referensi PO : ", italics:true, size:20, color:C_GRAY, font:F_TIMES }),
+              new TextRun({ text:getPoReference(), bold:true, size:20, color:C_GRAY, font:F_TIMES }),
+            ]}) ] : []),
+          hline(C_LINE, 4, getPoReference() ? 180 : 140),         // garis tipis abu
           para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:430 }),
           hline(C_GREEN, 6, 110, 400, { left:2890, right:2890 }), // garis hijau ~40% di tengah
-          para("Kepada Yth.", { after:270 }),
-          para(customer.name || "-", { bold:true, after:270 }),
-          ...(customer.phone ? [para(`No. Telepon : ${customer.phone}`, { after:270 })] : []),
-          ...(customer.email ? [para(`Email           : ${customer.email}`, { after:270 })] : []),
-          para("di Tempat", { after:400 }),
-          para("Dengan hormat,", { after:270 }),
+          para("Kepada Yth."),
+          para(customer.name || "-", { bold:true }),
+          ...(customer.phone ? [para(`No. Telepon : ${customer.phone}`)] : []),
+          ...(customer.email ? [para(`Email           : ${customer.email}`)] : []),
+          para("di Tempat", { after:140 }),
+          para("Dengan hormat,"),
           para(opening, { after:230 }),
           new Table({ width:{ size:100, type:WidthType.PERCENTAGE }, borders: TBL_BORDERS,
             rows: [ headerRow, ...itemRows, ...totalRows ] }),
@@ -1978,7 +1982,7 @@ async function generateDOCX(){
           ...(includePpn ? [ para(PPN_DISCLAIMER,
             { italics:true, size:15, color:C_GRAY, before:160, after:160 }) ] : []),
           para("Demikian penawaran ini kami sampaikan. Harga berlaku pada hari yang sama dengan tanggal quotation.",
-            { before:340, after:350 }),
+            { before:340 }),
           para("Atas perhatian dan kepercayaan Bapak/Ibu, kami ucapkan terima kasih."),
           para("Page : 1/2", { align:AlignmentType.RIGHT, italics:true, size:16, color:C_GRAY, before:450 }),
           // ---- Halaman 2: Syarat & Ketentuan ----
