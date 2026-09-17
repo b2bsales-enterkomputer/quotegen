@@ -61,7 +61,8 @@
   table{ width:100%; border-collapse:collapse; margin-bottom:10px; }
   th{ text-align:left; font-size:11px; color:var(--tdim); padding:7px 6px; border-bottom:1px solid var(--border); }
   td{ padding:6px; border-bottom:1px solid var(--border); font-size:12px; vertical-align:middle; }
-  td input{ margin-bottom:0; padding:6px 7px; font-size:12px; }
+  td input, td textarea{ margin-bottom:0; padding:6px 7px; font-size:12px; }
+  td textarea{ min-height:0; }
   .num{ text-align:right; white-space:nowrap; color:var(--text); }
   .del-btn{
     background:var(--red); border:none; color:#fff; border-radius:5px;
@@ -706,7 +707,7 @@ function renderCart(skipRebuildInputs){
     cartItems.forEach(it => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><input value="${escapeHtml(it.name)}" oninput="updateItem(${it.id},'name',this.value)" placeholder="Nama produk"></td>
+        <td><textarea rows="${Math.max(1, Math.min(12, (it.name||"").split("\n").length))}" oninput="updateItem(${it.id},'name',this.value)" placeholder="Nama produk">${escapeHtml(it.name)}</textarea></td>
         <td><input type="number" min="1" value="${it.qty}" oninput="updateItem(${it.id},'qty',this.value)"></td>
         <td><input type="number" min="0" value="${it.price}" oninput="updateItem(${it.id},'price',this.value)"></td>
         <td class="num" data-total-id="${it.id}">${fmtRp((Number(it.qty)||0) * (Number(it.price)||0))}</td>
@@ -849,7 +850,13 @@ const POS_LINE_RE_3 = /(\d+)\s*(?:unit|pcs|pc|buah)\s+(.+?)\s+@\s*(?:Rp\s*)?([\d
 const POS_LINE_RE_4 = /(.+?)\s+(?:Rp\s*)?([\d.]{4,})(?:\s*[xX]\s*(\d+))?$/i;
 
 function cleanProductName(name){
-  return name.replace(/\[READY\]/ig, "").replace(/\s+/g," ").trim();
+  return name.replace(/\[READY\]/ig, "")
+    .replace(/<br\s*\/?>/ig, "\n")
+    .replace(/\[\[/g, "\n[")
+    .split("\n")
+    .map(l => l.replace(/[^\S\n]+/g," ").trim())
+    .filter(l => l && l !== "]")
+    .join("\n");
 }
 function parsePosText(rawText){
   const items = [], failed = [];
@@ -1859,8 +1866,9 @@ async function generateDOCX(){
     const cellText = (text, o={}) => new TableCell({
       children:[ new Paragraph({ alignment: o.align || AlignmentType.LEFT,
         spacing: LINE,
-        children:[ new TextRun({ text: String(text), bold: !!o.bold, italics: !!o.italics,
-          color: o.color, size: o.size || 18, font: F_TIMES }) ] }) ],
+        children: String(text).split("\n").map((seg, i) => new TextRun({ text: seg,
+          break: i ? 1 : undefined, bold: !!o.bold, italics: !!o.italics,
+          color: o.color, size: o.size || 18, font: F_TIMES })) }) ],
       shading: o.fill ? { fill: o.fill, type: ShadingType.CLEAR, color:"auto" } : undefined,
       width: o.width ? { size: o.width, type: WidthType.PERCENTAGE } : undefined,
       columnSpan: o.colSpan, rowSpan: o.rowSpan, verticalAlign: o.valign,
