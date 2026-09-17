@@ -1853,7 +1853,7 @@ async function generateDOCX(){
     });
     const hline = (color, size, before=0, after=0, indent) => new Paragraph({
       text: "", indent,
-      spacing: { before, after, line: 40, lineRule: LineRuleType.AT_LEAST },
+      spacing: { before, after, line: 40, lineRule: LineRuleType.EXACT },
       border: { bottom: { style: BorderStyle.SINGLE, size, color, space: 1 } },
     });
     const cellText = (text, o={}) => new TableCell({
@@ -1948,7 +1948,7 @@ async function generateDOCX(){
         }},
         children: [
           kopImage(),
-          new Paragraph({ spacing:{ before:200, after:0, ...LINE },
+          new Paragraph({ spacing:{ before:40, after:0, ...LINE },
             tabStops:[{ type:TabStopType.RIGHT, position:CW_TW }],
             // garis tipis abu = border bawah baris ini (atau baris Referensi PO jika ada)
             ...(getPoReference() ? {} : {
@@ -1959,13 +1959,13 @@ async function generateDOCX(){
               new TextRun({ text:`\tJakarta, ${dateStr}`, font:F_TIMES, size:20 }),
             ]}),
           ...(getPoReference() ? [ new Paragraph({ spacing:{ ...LINE, after:0 },
-            border:{ bottom:{ style:BorderStyle.SINGLE, size:4, color:C_LINE, space:5 } },
+            border:{ bottom:{ style:BorderStyle.SINGLE, size:4, color:C_LINE, space:3 } },
             children:[
               new TextRun({ text:"Referensi PO : ", italics:true, size:20, color:C_GRAY, font:F_TIMES }),
               new TextRun({ text:getPoReference(), bold:true, size:20, color:C_GRAY, font:F_TIMES }),
             ]}) ] : []),
-          para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:280 }),
-          hline(C_GREEN, 6, 40, 300, { left:2890, right:2890 }), // garis hijau ~40% di tengah
+          para(judul.toUpperCase(), { align:AlignmentType.CENTER, bold:true, size:26, before:190 }),
+          hline(C_GREEN, 6, 20, 220, { left:2890, right:2890 }), // garis hijau ~40% di tengah
           para("Kepada Yth."),
           para(customer.name || "-", { bold:true }),
           ...(customer.phone ? [para(`No. Telepon : ${customer.phone}`)] : []),
